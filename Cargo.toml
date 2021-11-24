@@ -9,3 +9,8 @@ path = "src/lib.rs"
 
 [dependencies]
 sha2 = "0.9.3"
+rocket = "0.5.0-rc.1"
+
+[dependencies.rocket_dyn_templates]
+version = "0.1.0-rc.1"
+features = ["handlebars", "tera"]

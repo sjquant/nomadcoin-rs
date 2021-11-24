@@ -1,9 +1,18 @@
-use nomadcoin::BlockChain;
+#[macro_use]
+extern crate rocket;
+use std::collections::HashMap;
 
-fn main() {
-    let mut chain = BlockChain::new();
-    chain.add_block("Hello, World");
-    chain.add_block("Another Block");
-    chain.add_block("Third Block");
-    chain.print_blocks();
+use rocket_dyn_templates::Template;
+
+#[get("/")]
+fn index() -> Template {
+    let context: HashMap<String, String> = HashMap::new();
+    Template::render("index", context)
+}
+
+#[launch]
+fn rocket() -> _ {
+    rocket::build()
+        .mount("/", routes![index])
+        .attach(Template::fairing())
 }
