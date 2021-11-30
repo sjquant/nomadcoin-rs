@@ -1,3 +1,4 @@
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 pub struct BlockChain {
@@ -26,17 +27,13 @@ impl BlockChain {
         }
     }
 
-    pub fn print_blocks(&self) {
-        for b in &self.blocks {
-            println!("Data: {}", b.data);
-            println!("Hash: {}", b.hash);
-            println!("Prev hash: {}\n", b.prev_hash)
-        }
+    pub fn all_blocks(&self) -> &Vec<Block> {
+        return &self.blocks;
     }
 }
 
-#[derive(PartialEq, Debug)]
-struct Block {
+#[derive(PartialEq, Debug, Serialize)]
+pub struct Block {
     data: String,
     hash: String,
     prev_hash: String,

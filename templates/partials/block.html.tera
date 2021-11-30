@@ -1,0 +1,5 @@
+<ul>
+  <li>Data: {{ block.data }}</li>
+  <li>Hash: {{ block.hash }}</li>
+  <li>Prev Hash: {{ block.prev_hash }}</li>
+</ul>
