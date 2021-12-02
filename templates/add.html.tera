@@ -4,8 +4,14 @@
   <body>
     {% include "partials/header" %}
     <main>
-      <form>
-        <input type="text" placeholder="Data for your block" required />
+      <form action="/add" method="POST">
+        <input
+          type="text"
+          placeholder="Data for your block"
+          required
+          name="block_data"
+        />
+        <button>Add Block</button>
       </form>
     </main>
     {% include "partials/footer" %}
