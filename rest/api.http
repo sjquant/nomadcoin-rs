@@ -1,0 +1,12 @@
+### Get Documentation
+GET http://localhost:8000/
+
+### See all blocks
+GET http://localhost:8000/blocks
+
+### Add a block
+POST http://localhost:8000/blocks
+
+{
+    "message": "Hello, World"
+}

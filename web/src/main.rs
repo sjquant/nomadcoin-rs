@@ -11,7 +11,7 @@ use std::{collections::HashMap, sync::Mutex};
 #[derive(Serialize)]
 struct HomeTemplateContext<'r> {
     page_title: &'r str,
-    blocks: &'r Vec<Block>,
+    blocks: Vec<Block>,
 }
 
 #[derive(FromForm)]

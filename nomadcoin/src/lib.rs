@@ -27,12 +27,12 @@ impl BlockChain {
         }
     }
 
-    pub fn all_blocks(&self) -> &Vec<Block> {
-        return &self.blocks;
+    pub fn all_blocks(&self) -> Vec<Block> {
+        return self.blocks.clone();
     }
 }
 
-#[derive(PartialEq, Debug, Serialize)]
+#[derive(PartialEq, Debug, Serialize, Clone)]
 pub struct Block {
     data: String,
     hash: String,
