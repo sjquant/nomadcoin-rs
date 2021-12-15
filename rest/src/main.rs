@@ -71,11 +71,23 @@ fn add_block(body: Json<AddBlockBody>, chain_state: &State<Mutex<BlockChain>>) -
     Status::Created
 }
 
+#[get("/blocks/<height>")]
+fn get_block(chain_state: &State<Mutex<BlockChain>>, height: usize) -> Option<Json<Block>> {
+    let chain = chain_state.lock().unwrap();
+    match chain.get_block(height) {
+        Some(block) => Some(Json(block)),
+        None => None,
+    }
+}
+
 #[launch]
 fn rocket() -> _ {
     let chain = BlockChain::new();
     let chain_mutex = Mutex::new(chain);
     rocket::build()
-        .mount("/", routes![documentation, add_block, fetch_blocks])
+        .mount(
+            "/",
+            routes![documentation, add_block, fetch_blocks, get_block],
+        )
         .manage(chain_mutex)
 }

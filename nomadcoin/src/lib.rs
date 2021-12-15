@@ -17,6 +17,7 @@ impl BlockChain {
             data: data.to_string(),
             prev_hash: prev_hash.to_string(),
             hash: format!("{:x}", hash),
+            height: self.blocks.len() + 1,
         });
     }
 
@@ -28,7 +29,15 @@ impl BlockChain {
     }
 
     pub fn all_blocks(&self) -> Vec<Block> {
-        return self.blocks.clone();
+        self.blocks.clone()
+    }
+
+    pub fn get_block(&self, height: usize) -> Option<Block> {
+        let blocks = self.blocks.clone();
+        match blocks.get(height - 1) {
+            Some(block) => Some(block.clone()),
+            None => None,
+        }
     }
 }
 
@@ -37,6 +46,7 @@ pub struct Block {
     data: String,
     hash: String,
     prev_hash: String,
+    height: usize,
 }
 
 #[cfg(test)]
@@ -46,13 +56,13 @@ mod tests {
     #[test]
     fn add_block() {
         let mut chain = BlockChain::new();
-        assert_eq!(chain.blocks.len(), 0);
 
         chain.add_block("Hello, World");
         let block1 = Block {
             data: "Hello, World".to_string(),
             hash: "03675ac53ff9cd1535ccc7dfcdfa2c458c5218371f418dc136f2d19ac1fbe8a5".to_string(),
             prev_hash: "".to_string(),
+            height: 1,
         };
         assert_eq!(chain.blocks[0], block1);
 
@@ -61,7 +71,39 @@ mod tests {
             data: "Hello, Korea".to_string(),
             hash: "be18266b56aabea65bf6cc3cc23d39996dd84f2893ee4ba4bb8abd24280d23ac".to_string(),
             prev_hash: block1.hash,
+            height: 2,
         };
         assert_eq!(chain.blocks[1], block2);
+    }
+
+    #[test]
+    fn all_blocks() {
+        let mut chain = BlockChain::new();
+        chain.add_block("Hello, World");
+        chain.add_block("Hello, Korea");
+
+        let blocks = chain.all_blocks();
+        assert_eq!(blocks, chain.blocks)
+    }
+
+    #[test]
+    fn get_block() {
+        let mut chain = BlockChain::new();
+        chain.add_block("Hello, World");
+
+        let block = chain.get_block(1).unwrap();
+        assert_eq!(
+            block,
+            Block {
+                data: "Hello, World".to_string(),
+                hash: "03675ac53ff9cd1535ccc7dfcdfa2c458c5218371f418dc136f2d19ac1fbe8a5"
+                    .to_string(),
+                prev_hash: "".to_string(),
+                height: 1,
+            }
+        );
+
+        let block_not_found = chain.get_block(2);
+        assert_eq!(None, block_not_found);
     }
 }

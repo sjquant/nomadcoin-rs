@@ -8,5 +8,8 @@ GET http://localhost:8000/blocks
 POST http://localhost:8000/blocks
 
 {
-    "message": "Hello, World"
+    "message": "Hello, Japan!!!"
 }
+
+### Get a block
+GET http://localhost:8000/blocks/1
