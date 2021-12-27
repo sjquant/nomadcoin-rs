@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 sha2 = "0.9.3"
 serde = { version = "1.0.130", features = ["derive"] }
+nut = "0.1.0"
