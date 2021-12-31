@@ -14,19 +14,12 @@ pub struct Block {
 impl Block {
     pub fn new(data: String, prev_hash: String, height: usize) -> Self {
         let hash = Sha256::digest(data.as_bytes());
-        let block = Block {
+        Block {
             data: data,
             prev_hash: prev_hash,
             hash: format!("{:x}", hash),
             height: height,
-        };
-        block.persist();
-        block
-    }
-
-    fn persist(&self) {
-        let data = bincode::serialize(&self).unwrap();
-        db::save_block(self.hash.as_bytes(), data);
+        }
     }
 }
 
