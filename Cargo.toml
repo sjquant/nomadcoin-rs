@@ -1,3 +1,17 @@
-[workspace]
+[package]
+name = "nomadcoin-rs"
+version = "0.1.0"
+edition = "2021"
 
-members = ["web", "nomadcoin", "rest"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "nomadcoin"
+path = "src/lib.rs"
+
+[dependencies]
+rocket = { version = "0.5.0-rc.1", features = ["json"] }
+sha2 = "0.9.3"
+serde = { version = "1.0.130", features = ["derive"] }
+bincode = "1.2.1"
+nut = "0.1.0"

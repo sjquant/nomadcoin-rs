@@ -82,7 +82,7 @@ fn get_block(chain_state: &State<Mutex<BlockChain>>, height: usize) -> Option<Js
 
 #[launch]
 fn rocket() -> _ {
-    let chain = BlockChain::new();
+    let chain = BlockChain::get();
     let chain_mutex = Mutex::new(chain);
     rocket::build()
         .mount(
