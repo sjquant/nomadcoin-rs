@@ -1,9 +1,7 @@
-use crate::db;
-use bincode;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-#[derive(PartialEq, Debug, Serialize, Clone)]
+#[derive(PartialEq, Debug, Deserialize, Serialize, Clone)]
 pub struct Block {
     pub data: String,
     pub hash: String,
@@ -28,7 +26,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn new_block() {
+    fn test_new_block() {
         let block = Block::new(String::from("Hello, World"), String::from("a-prev-hash"), 2);
         assert_eq!(
             block,

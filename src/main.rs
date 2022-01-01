@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate rocket;
 use nomadcoin::{Block, BlockChain};
+use nut::{DBBuilder, DB};
 use rocket::{
     http::Status,
     serde::{json::Json, Deserialize, Serialize},
@@ -24,6 +25,10 @@ struct AddBlockBody {
 
 fn url(path: &str) -> String {
     format!("http://localhost:8000{}", path)
+}
+
+fn get_db() -> DB {
+    DBBuilder::new("blockchain.db").build().unwrap()
 }
 
 #[get("/")]
@@ -60,21 +65,24 @@ fn documentation() -> Json<Vec<URLDescription>> {
 #[get("/blocks")]
 fn fetch_blocks(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Block>> {
     let chain = chain_state.lock().unwrap();
-    let blocks = chain.all_blocks();
+    let mut db = get_db();
+    let blocks = chain.all_blocks(&mut db);
     Json(blocks)
 }
 
 #[post("/blocks", data = "<body>")]
 fn add_block(body: Json<AddBlockBody>, chain_state: &State<Mutex<BlockChain>>) -> Status {
     let mut chain = chain_state.lock().unwrap();
-    chain.add_block(&body.message);
+    let mut db = get_db();
+    chain.add_block(&mut db, body.message.clone());
     Status::Created
 }
 
-#[get("/blocks/<height>")]
-fn get_block(chain_state: &State<Mutex<BlockChain>>, height: usize) -> Option<Json<Block>> {
+#[get("/blocks/<hash>")]
+fn get_block(chain_state: &State<Mutex<BlockChain>>, hash: String) -> Option<Json<Block>> {
     let chain = chain_state.lock().unwrap();
-    match chain.get_block(height) {
+    let mut db = get_db();
+    match chain.get_block(&mut db, hash) {
         Some(block) => Some(Json(block)),
         None => None,
     }
@@ -82,7 +90,8 @@ fn get_block(chain_state: &State<Mutex<BlockChain>>, height: usize) -> Option<Js
 
 #[launch]
 fn rocket() -> _ {
-    let chain = BlockChain::get();
+    let mut db = get_db();
+    let chain = BlockChain::get(&mut db);
     let chain_mutex = Mutex::new(chain);
     rocket::build()
         .mount(
