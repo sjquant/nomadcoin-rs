@@ -7,16 +7,35 @@ pub struct Block {
     pub hash: String,
     pub prev_hash: String,
     pub height: u64,
+    pub difficulty: u16,
+    pub nonce: u64,
 }
 
 impl Block {
-    pub fn new(data: String, prev_hash: String, height: u64) -> Self {
-        let hash = Sha256::digest(data.as_bytes());
+    pub fn mine(data: String, prev_hash: String, height: u64, difficulty: u16) -> Self {
+        let mut nonce: u64 = 0;
+        let mut hash_data;
+        let mut hash = String::from("");
+        let target = std::iter::repeat("0")
+            .take(difficulty.into())
+            .collect::<String>();
+
+        loop {
+            if hash.starts_with(&target) {
+                break;
+            }
+            hash_data = format!("{}{}{}{}{}", data, prev_hash, height, difficulty, nonce);
+            hash = format!("{:x}", Sha256::digest(hash_data.as_bytes()));
+            nonce += 1;
+        }
+
         Block {
             data: data,
             prev_hash: prev_hash,
-            hash: format!("{:x}", hash),
+            hash: hash,
             height: height,
+            difficulty: difficulty,
+            nonce: nonce,
         }
     }
 }
@@ -26,17 +45,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_block() {
-        let block = Block::new(String::from("Hello, World"), String::from("a-prev-hash"), 2);
+    fn test_mine_block() {
+        let block = Block::mine(
+            String::from("Hello, World"),
+            String::from("a-prev-hash"),
+            10,
+            2,
+        );
         assert_eq!(
             block,
             Block {
                 data: String::from("Hello, World"),
                 prev_hash: String::from("a-prev-hash"),
                 hash: String::from(
-                    "03675ac53ff9cd1535ccc7dfcdfa2c458c5218371f418dc136f2d19ac1fbe8a5"
+                    "00f3645cc2dd8b1d2bbfaf29333ac4d31433dca73280cfd2f4f55a91f790947b"
                 ),
-                height: 2
+                height: 10,
+                difficulty: 2,
+                nonce: 428
             }
         );
     }

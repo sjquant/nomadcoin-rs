@@ -26,7 +26,7 @@ impl BlockChain {
     }
 
     pub fn add_block(&mut self, db: &mut DB, data: String) {
-        let block = Block::new(data, self.newest_hash.clone(), self.height + 1);
+        let block = Block::mine(data, self.newest_hash.clone(), self.height + 1, 1);
         let data = bincode::serialize(&block).unwrap();
         repo::save_block(db, block.hash.as_bytes(), data);
         self.newest_hash = block.hash;
@@ -86,7 +86,7 @@ mod tests {
         // Then
         assert_eq!(
             chain.newest_hash,
-            String::from("03675ac53ff9cd1535ccc7dfcdfa2c458c5218371f418dc136f2d19ac1fbe8a5")
+            String::from("0bcf2215a416a39b22b37a159168147f039c2c53028d9a193c9c9fe92dc54043")
         );
         assert_eq!(chain.height, 2);
     }
@@ -100,7 +100,7 @@ mod tests {
         chain.add_block(&mut db, String::from("Hello, World"));
 
         // Then
-        let expected = Block::new(String::from("Hello, World"), String::from(""), 1);
+        let expected = Block::mine(String::from("Hello, World"), String::from(""), 1, 1);
         let actual = chain.get_block(&mut db, expected.hash.clone()).unwrap();
         assert_eq!(actual, expected);
     }
@@ -119,20 +119,24 @@ mod tests {
             Block {
                 data: "Hello, Korea".to_string(),
                 prev_hash: String::from(
-                    "03675ac53ff9cd1535ccc7dfcdfa2c458c5218371f418dc136f2d19ac1fbe8a5",
+                    "093da9f4424f0ba24e620a723061a5f1350ae9d67347820d4a7e0852ea7a1d3c",
                 ),
                 hash: String::from(
-                    "be18266b56aabea65bf6cc3cc23d39996dd84f2893ee4ba4bb8abd24280d23ac",
+                    "06ae2f7cfaa5faa17c7bbd9897cf1d15da5a63cdaf24fcbc62e40421e5becb6a",
                 ),
                 height: 2,
+                difficulty: 1,
+                nonce: 32,
             },
             Block {
                 data: String::from("Hello, World"),
                 prev_hash: String::from(""),
                 hash: String::from(
-                    "03675ac53ff9cd1535ccc7dfcdfa2c458c5218371f418dc136f2d19ac1fbe8a5",
+                    "093da9f4424f0ba24e620a723061a5f1350ae9d67347820d4a7e0852ea7a1d3c",
                 ),
                 height: 1,
+                difficulty: 1,
+                nonce: 13,
             },
         ];
         assert_eq!(actual, expected);
