@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -9,23 +10,23 @@ pub struct Block {
     pub height: u64,
     pub difficulty: u16,
     pub nonce: u64,
+    pub timestamp: i64,
 }
 
 impl Block {
     pub fn mine(data: String, prev_hash: String, height: u64, difficulty: u16) -> Self {
         let mut nonce: u64 = 0;
-        let mut hash_data;
+        let mut payload;
         let mut hash = String::from("");
         let target = std::iter::repeat("0")
             .take(difficulty.into())
             .collect::<String>();
-
         loop {
             if hash.starts_with(&target) {
                 break;
             }
-            hash_data = format!("{}{}{}{}{}", data, prev_hash, height, difficulty, nonce);
-            hash = format!("{:x}", Sha256::digest(hash_data.as_bytes()));
+            payload = format!("{}{}{}{}{}", data, prev_hash, height, difficulty, nonce);
+            hash = format!("{:x}", Sha256::digest(payload.as_bytes()));
             nonce += 1;
         }
 
@@ -36,6 +37,7 @@ impl Block {
             height: height,
             difficulty: difficulty,
             nonce: nonce,
+            timestamp: Utc::now().timestamp(),
         }
     }
 }
@@ -62,7 +64,8 @@ mod tests {
                 ),
                 height: 10,
                 difficulty: 2,
-                nonce: 428
+                nonce: 428,
+                timestamp: block.timestamp
             }
         );
     }

@@ -4,10 +4,15 @@ use crate::{block::Block, repo};
 
 use nut::DB;
 
+const DIFFICULTY_INTERVAL: u64 = 5;
+const TIME_THRESHOLD: i64 = 36000;
+const ALLOWED_BUFFER: i64 = 7200;
+
 #[derive(Serialize, Deserialize)]
 pub struct BlockChain {
     pub newest_hash: String,
     pub height: u64,
+    pub difficulty: u16,
 }
 
 impl BlockChain {
@@ -18,6 +23,7 @@ impl BlockChain {
                 let blockchain = BlockChain {
                     newest_hash: String::from(""),
                     height: 0,
+                    difficulty: 1,
                 };
                 blockchain.create_checkpoint(db);
                 blockchain
@@ -26,7 +32,12 @@ impl BlockChain {
     }
 
     pub fn add_block(&mut self, db: &mut DB, data: String) {
-        let block = Block::mine(data, self.newest_hash.clone(), self.height + 1, 1);
+        let block = Block::mine(
+            data,
+            self.newest_hash.clone(),
+            self.height + 1,
+            self.calc_difficulty(db),
+        );
         let data = bincode::serialize(&block).unwrap();
         repo::save_block(db, block.hash.as_bytes(), data);
         self.newest_hash = block.hash;
@@ -52,6 +63,21 @@ impl BlockChain {
 
     pub fn get_block(&self, db: &mut DB, hash: String) -> Option<Block> {
         repo::get_block(db, hash.as_bytes()).map(|data| bincode::deserialize(&data).unwrap())
+    }
+
+    fn calc_difficulty(&mut self, db: &mut DB) -> u16 {
+        if self.height != 0 && self.height % DIFFICULTY_INTERVAL == 0 {
+            let all_blocks = self.all_blocks(db);
+            let newest_timestamp = all_blocks[0].timestamp;
+            let base_timestamp = all_blocks[(DIFFICULTY_INTERVAL - 1) as usize].timestamp;
+            let time_taken = newest_timestamp - base_timestamp;
+            if time_taken < TIME_THRESHOLD - ALLOWED_BUFFER {
+                self.difficulty += 1;
+            } else if time_taken > TIME_THRESHOLD + ALLOWED_BUFFER {
+                self.difficulty -= 1;
+            }
+        }
+        self.difficulty
     }
 }
 
@@ -127,6 +153,7 @@ mod tests {
                 height: 2,
                 difficulty: 1,
                 nonce: 32,
+                timestamp: actual[0].timestamp,
             },
             Block {
                 data: String::from("Hello, World"),
@@ -137,6 +164,7 @@ mod tests {
                 height: 1,
                 difficulty: 1,
                 nonce: 13,
+                timestamp: actual[1].timestamp,
             },
         ];
         assert_eq!(actual, expected);
