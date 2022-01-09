@@ -7,7 +7,7 @@ use nut::DB;
 #[derive(Serialize, Deserialize)]
 pub struct BlockChain {
     pub newest_hash: String,
-    pub height: usize,
+    pub height: u64,
 }
 
 impl BlockChain {

@@ -6,11 +6,11 @@ pub struct Block {
     pub data: String,
     pub hash: String,
     pub prev_hash: String,
-    pub height: usize,
+    pub height: u64,
 }
 
 impl Block {
-    pub fn new(data: String, prev_hash: String, height: usize) -> Self {
+    pub fn new(data: String, prev_hash: String, height: u64) -> Self {
         let hash = Sha256::digest(data.as_bytes());
         Block {
             data: data,
