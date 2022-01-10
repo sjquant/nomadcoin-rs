@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate rocket;
 use nomadcoin::{Block, BlockChain};
-use nut::{DBBuilder, DB};
+use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::{
     http::Status,
     serde::{json::Json, Deserialize, Serialize},
@@ -27,8 +27,19 @@ fn url(path: &str) -> String {
     format!("http://localhost:8000{}", path)
 }
 
-fn get_db() -> DB {
-    DBBuilder::new("blockchain.db").build().unwrap()
+fn get_db() -> PickleDb {
+    match PickleDb::load(
+        "blockchain.db",
+        PickleDbDumpPolicy::AutoDump,
+        SerializationMethod::Json,
+    ) {
+        Ok(load) => load,
+        Err(_) => PickleDb::new(
+            "blockchain.db",
+            PickleDbDumpPolicy::AutoDump,
+            SerializationMethod::Json,
+        ),
+    }
 }
 
 #[get("/")]

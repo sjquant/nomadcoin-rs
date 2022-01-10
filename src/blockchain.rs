@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{block::Block, repo};
-
-use nut::DB;
+use pickledb::PickleDb;
 
 const DIFFICULTY_INTERVAL: u64 = 5;
 const TIME_THRESHOLD: i64 = 36000;
@@ -16,9 +15,9 @@ pub struct BlockChain {
 }
 
 impl BlockChain {
-    pub fn get(db: &mut DB) -> Self {
+    pub fn get(db: &mut PickleDb) -> Self {
         match repo::checkpoint(db) {
-            Some(data) => bincode::deserialize(&data).unwrap(),
+            Some(blockchain) => blockchain,
             None => {
                 let blockchain = BlockChain {
                     newest_hash: String::from(""),
@@ -31,25 +30,24 @@ impl BlockChain {
         }
     }
 
-    pub fn add_block(&mut self, db: &mut DB, data: String) {
+    pub fn add_block(&mut self, db: &mut PickleDb, data: String) {
         let block = Block::mine(
             data,
             self.newest_hash.clone(),
             self.height + 1,
             self.calc_difficulty(db),
         );
-        let data = bincode::serialize(&block).unwrap();
-        repo::save_block(db, block.hash.as_bytes(), data);
+        repo::save_block(db, block.hash.clone(), &block);
         self.newest_hash = block.hash;
         self.height = block.height;
         self.create_checkpoint(db);
     }
 
-    fn create_checkpoint(&self, db: &mut DB) {
-        repo::save_blockchain(db, bincode::serialize(&self).unwrap());
+    fn create_checkpoint(&self, db: &mut PickleDb) {
+        repo::save_blockchain(db, self);
     }
 
-    pub fn all_blocks(&self, db: &mut DB) -> Vec<Block> {
+    pub fn all_blocks(&self, db: &mut PickleDb) -> Vec<Block> {
         let mut hash_cursor = self.newest_hash.clone();
         let mut blocks: Vec<Block> = Vec::new();
 
@@ -61,11 +59,11 @@ impl BlockChain {
         blocks
     }
 
-    pub fn get_block(&self, db: &mut DB, hash: String) -> Option<Block> {
-        repo::get_block(db, hash.as_bytes()).map(|data| bincode::deserialize(&data).unwrap())
+    pub fn get_block(&self, db: &mut PickleDb, hash: String) -> Option<Block> {
+        repo::get_block(db, hash)
     }
 
-    fn calc_difficulty(&mut self, db: &mut DB) -> u16 {
+    fn calc_difficulty(&mut self, db: &mut PickleDb) -> u16 {
         if self.height != 0 && self.height % DIFFICULTY_INTERVAL == 0 {
             let all_blocks = self.all_blocks(db);
             let newest_timestamp = all_blocks[0].timestamp;

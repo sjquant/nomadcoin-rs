@@ -1,4 +1,4 @@
-use nut::{DBBuilder, DB};
+use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::env;
 use std::iter;
@@ -11,7 +11,11 @@ pub fn random_string(len: usize) -> String {
         .collect::<String>()
 }
 
-pub fn test_db() -> DB {
+pub fn test_db() -> PickleDb {
     let temp_path = env::temp_dir().join(format!("{}.db", random_string(32)));
-    return DBBuilder::new(temp_path).autoremove(true).build().unwrap();
+    PickleDb::new(
+        temp_path,
+        PickleDbDumpPolicy::AutoDump,
+        SerializationMethod::Bin,
+    )
 }
