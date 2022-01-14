@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn get_new_blockchain() {
-        let mut db = test_utils::test_db();
+        let (_r, mut db) = test_utils::test_db();
         let chain = BlockChain::get(&mut db);
         assert_eq!(chain.newest_hash, "");
         assert_eq!(chain.height, 0);
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     fn get_blockchain_from_db() {
         // Given
-        let mut db = test_utils::test_db();
+        let (_r, mut db) = test_utils::test_db();
 
         {
             let mut chain = BlockChain::get(&mut db);
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn add_block() {
-        let mut db = test_utils::test_db();
+        let (_r, mut db) = test_utils::test_db();
 
         // When
         let mut chain = BlockChain::get(&mut db);
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn all_blocks() {
         // Given
-        let mut db = test_utils::test_db();
+        let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
         chain.add_block(&mut db, String::from("Hello, World"));
         chain.add_block(&mut db, String::from("Hello, Korea"));
