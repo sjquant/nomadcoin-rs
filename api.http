@@ -7,12 +7,14 @@ GET http://localhost:8000/blocks
 ### Add a block
 POST http://localhost:8000/blocks
 
-{
-    "message": "Hello, Korea!!!"
-}
-
 ### Get a block
 GET http://localhost:8000/blocks/34bb65aac5e5eca3ff3799b31b69a330bdd9afd7a8509c98de3a6296fd961323
 
 ### Get a nonexistent block
 GET http://localhost:8000/blocks/nonexistent-block
+
+### Get transaction outputs for an address
+GET http://localhost:8000/addresses/todo-address/txnouts
+
+### Get balance for an address
+GET http://localhost:8000/addresses/todo-address/balance

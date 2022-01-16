@@ -1,10 +1,10 @@
 #[macro_use]
 extern crate rocket;
-use nomadcoin::{Block, BlockChain};
+use nomadcoin::{transaction::TxnOut, Block, BlockChain};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::{
     http::Status,
-    serde::{json::Json, Deserialize, Serialize},
+    serde::{json::Json, Serialize},
     State,
 };
 use std::sync::Mutex;
@@ -18,9 +18,10 @@ struct URLDescription {
     payload: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct AddBlockBody {
-    message: String,
+#[derive(Serialize)]
+struct BalanceRespone {
+    address: String,
+    balance: u64,
 }
 
 fn url(path: &str) -> String {
@@ -61,12 +62,24 @@ fn documentation() -> Json<Vec<URLDescription>> {
             url: url("/blocks"),
             method: String::from("POST"),
             description: String::from("Add A Block"),
-            payload: Some(String::from("data:string")),
+            payload: None,
         },
         URLDescription {
             url: url("/blocks/<id>"),
             method: String::from("GET"),
             description: String::from("See A Block"),
+            payload: None,
+        },
+        URLDescription {
+            url: url("/addresses/<address>/txnouts"),
+            method: String::from("GET"),
+            description: String::from("Get transaction outputs for an address"),
+            payload: None,
+        },
+        URLDescription {
+            url: url("/addresses/<address>/balance"),
+            method: String::from("GET"),
+            description: String::from("Get balance for an address"),
             payload: None,
         },
     ];
@@ -81,11 +94,11 @@ fn fetch_blocks(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Block>> {
     Json(blocks)
 }
 
-#[post("/blocks", data = "<body>")]
-fn add_block(body: Json<AddBlockBody>, chain_state: &State<Mutex<BlockChain>>) -> Status {
+#[post("/blocks")]
+fn add_block(chain_state: &State<Mutex<BlockChain>>) -> Status {
     let mut chain = chain_state.lock().unwrap();
     let mut db = get_db();
-    chain.add_block(&mut db, body.message.clone());
+    chain.add_block(&mut db);
     Status::Created
 }
 
@@ -99,6 +112,22 @@ fn get_block(chain_state: &State<Mutex<BlockChain>>, hash: String) -> Option<Jso
     }
 }
 
+#[get("/addresses/<address>/txnouts")]
+fn fetch_txnouts(chain_state: &State<Mutex<BlockChain>>, address: String) -> Json<Vec<TxnOut>> {
+    let chain = chain_state.lock().unwrap();
+    let mut db = get_db();
+    let txnouts = chain.txn_outs_by_address(&mut db, address.clone());
+    Json(txnouts)
+}
+
+#[get("/addresses/<address>/balance")]
+fn get_balance(chain_state: &State<Mutex<BlockChain>>, address: String) -> Json<BalanceRespone> {
+    let chain = chain_state.lock().unwrap();
+    let mut db = get_db();
+    let balance = chain.balance_by_address(&mut db, address.clone());
+    Json(BalanceRespone { address, balance })
+}
+
 #[launch]
 fn rocket() -> _ {
     let mut db = get_db();
@@ -107,7 +136,14 @@ fn rocket() -> _ {
     rocket::build()
         .mount(
             "/",
-            routes![documentation, add_block, fetch_blocks, get_block],
+            routes![
+                documentation,
+                add_block,
+                fetch_blocks,
+                get_block,
+                fetch_txnouts,
+                get_balance
+            ],
         )
         .manage(chain_mutex)
 }

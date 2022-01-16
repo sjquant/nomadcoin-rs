@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{block::Block, repo};
+use crate::{block::Block, repo, transaction::TxnOut};
 use pickledb::PickleDb;
 
 const DIFFICULTY_INTERVAL: u64 = 5;
@@ -30,9 +30,8 @@ impl BlockChain {
         }
     }
 
-    pub fn add_block(&mut self, db: &mut PickleDb, data: String) {
+    pub fn add_block(&mut self, db: &mut PickleDb) {
         let block = Block::mine(
-            data,
             self.newest_hash.clone(),
             self.height + 1,
             self.calc_difficulty(db),
@@ -77,6 +76,31 @@ impl BlockChain {
         }
         self.difficulty
     }
+
+    pub fn all_txn_outs(&self, db: &mut PickleDb) -> Vec<TxnOut> {
+        let blocks = self.all_blocks(db);
+        let mut txn_outs: Vec<TxnOut> = vec![];
+
+        for block in blocks.into_iter() {
+            for mut txn in block.transactions.into_iter() {
+                txn_outs.append(&mut txn.txn_outs)
+            }
+        }
+        txn_outs
+    }
+    pub fn txn_outs_by_address(&self, db: &mut PickleDb, address: String) -> Vec<TxnOut> {
+        self.all_txn_outs(db)
+            .into_iter()
+            .filter(|txn_out| txn_out.owner == address)
+            .collect()
+    }
+
+    pub fn balance_by_address(&self, db: &mut PickleDb, address: String) -> u64 {
+        self.txn_outs_by_address(db, address)
+            .iter()
+            .map(|txn| txn.amount)
+            .sum()
+    }
 }
 
 #[cfg(test)]
@@ -100,18 +124,14 @@ mod tests {
 
         {
             let mut chain = BlockChain::get(&mut db);
-            chain.add_block(&mut db, String::from("Hello, Korea"));
-            chain.add_block(&mut db, String::from("Hello, World"));
+            chain.add_block(&mut db);
+            chain.add_block(&mut db);
         }
 
         // When
         let chain = BlockChain::get(&mut db);
 
         // Then
-        assert_eq!(
-            chain.newest_hash,
-            String::from("0bcf2215a416a39b22b37a159168147f039c2c53028d9a193c9c9fe92dc54043")
-        );
         assert_eq!(chain.height, 2);
     }
 
@@ -121,10 +141,10 @@ mod tests {
 
         // When
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db, String::from("Hello, World"));
+        chain.add_block(&mut db);
 
         // Then
-        let expected = Block::mine(String::from("Hello, World"), String::from(""), 1, 1);
+        let expected = Block::mine(String::from(""), 1, 1);
         let actual = chain.get_block(&mut db, expected.hash.clone()).unwrap();
         assert_eq!(actual, expected);
     }
@@ -134,37 +154,11 @@ mod tests {
         // Given
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db, String::from("Hello, World"));
-        chain.add_block(&mut db, String::from("Hello, Korea"));
+        chain.add_block(&mut db);
+        chain.add_block(&mut db);
 
         // Then
         let actual = chain.all_blocks(&mut db);
-        let expected = vec![
-            Block {
-                data: "Hello, Korea".to_string(),
-                prev_hash: String::from(
-                    "093da9f4424f0ba24e620a723061a5f1350ae9d67347820d4a7e0852ea7a1d3c",
-                ),
-                hash: String::from(
-                    "06ae2f7cfaa5faa17c7bbd9897cf1d15da5a63cdaf24fcbc62e40421e5becb6a",
-                ),
-                height: 2,
-                difficulty: 1,
-                nonce: 32,
-                timestamp: actual[0].timestamp,
-            },
-            Block {
-                data: String::from("Hello, World"),
-                prev_hash: String::from(""),
-                hash: String::from(
-                    "093da9f4424f0ba24e620a723061a5f1350ae9d67347820d4a7e0852ea7a1d3c",
-                ),
-                height: 1,
-                difficulty: 1,
-                nonce: 13,
-                timestamp: actual[1].timestamp,
-            },
-        ];
-        assert_eq!(actual, expected);
+        assert_eq!(actual.len(), 2);
     }
 }
