@@ -1,6 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{block::Block, repo, transaction::TxnOut};
+use crate::{
+    block::Block,
+    error::Error,
+    repo,
+    transaction::{Transaction, TxnIn, TxnOut},
+};
 use pickledb::PickleDb;
 
 const DIFFICULTY_INTERVAL: u64 = 5;
@@ -12,6 +17,7 @@ pub struct BlockChain {
     pub newest_hash: String,
     pub height: u64,
     pub difficulty: u16,
+    mempool: Vec<Transaction>,
 }
 
 impl BlockChain {
@@ -23,6 +29,7 @@ impl BlockChain {
                     newest_hash: String::from(""),
                     height: 0,
                     difficulty: 1,
+                    mempool: vec![],
                 };
                 blockchain.create_checkpoint(db);
                 blockchain
@@ -88,18 +95,53 @@ impl BlockChain {
         }
         txn_outs
     }
-    pub fn txn_outs_by_address(&self, db: &mut PickleDb, address: String) -> Vec<TxnOut> {
+    pub fn txn_outs_by_address(&self, db: &mut PickleDb, address: &str) -> Vec<TxnOut> {
         self.all_txn_outs(db)
             .into_iter()
-            .filter(|txn_out| txn_out.owner == address)
+            .filter(|txn_out| txn_out.owner == address.to_string())
             .collect()
     }
 
-    pub fn balance_by_address(&self, db: &mut PickleDb, address: String) -> u64 {
+    pub fn balance_by_address(&self, db: &mut PickleDb, address: &str) -> u64 {
         self.txn_outs_by_address(db, address)
             .iter()
             .map(|txn| txn.amount)
             .sum()
+    }
+
+    pub fn make_transaction(
+        &mut self,
+        db: &mut PickleDb,
+        from: &str,
+        to: &str,
+        amount: u64,
+    ) -> Result<(), Error> {
+        if self.balance_by_address(db, from) < amount {
+            Err(Error::new("Not enough balance"))
+        } else {
+            let old_txn_outs = self.txn_outs_by_address(db, from);
+            let mut txn_ins: Vec<TxnIn> = vec![];
+            let mut txn_outs: Vec<TxnOut> = vec![];
+            let mut total = 0;
+            for each in old_txn_outs.into_iter() {
+                if total >= amount {
+                    break;
+                }
+                txn_ins.push(TxnIn::new(from, each.amount));
+                txn_outs.push(TxnOut::new(to, each.amount));
+                total += each.amount;
+            }
+            if total > amount {
+                txn_outs.push(TxnOut::new(from, total - amount));
+            }
+            let transaction = Transaction::new(txn_ins, txn_outs);
+            self.mempool.push(transaction);
+            Ok(())
+        }
+    }
+
+    pub fn mempool(&self) -> Vec<Transaction> {
+        self.mempool.clone()
     }
 }
 

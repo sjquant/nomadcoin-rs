@@ -23,7 +23,7 @@ impl Block {
         let target = std::iter::repeat("0")
             .take(difficulty.into())
             .collect::<String>();
-        let txn = Transaction::from_coinbase(String::from("todo-address"));
+        let txn = Transaction::from_coinbase("todo-address");
         loop {
             if hash.starts_with(&target) {
                 break;

@@ -1,10 +1,10 @@
 #[macro_use]
 extern crate rocket;
-use nomadcoin::{transaction::TxnOut, Block, BlockChain};
+use nomadcoin::{transaction::TxnOut, Block, BlockChain, Transaction};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::{
     http::Status,
-    serde::{json::Json, Serialize},
+    serde::{json::Json, Deserialize, Serialize},
     State,
 };
 use std::sync::Mutex;
@@ -22,6 +22,13 @@ struct URLDescription {
 struct BalanceRespone {
     address: String,
     balance: u64,
+}
+
+#[derive(Deserialize)]
+struct MakeTransactionBody {
+    from: String,
+    to: String,
+    amount: u64,
 }
 
 fn url(path: &str) -> String {
@@ -82,6 +89,12 @@ fn documentation() -> Json<Vec<URLDescription>> {
             description: String::from("Get balance for an address"),
             payload: None,
         },
+        URLDescription {
+            url: url("/mempool"),
+            method: String::from("GET"),
+            description: String::from("Get transactions inside blockchain memory pool"),
+            payload: None,
+        },
     ];
     Json(data)
 }
@@ -116,7 +129,7 @@ fn get_block(chain_state: &State<Mutex<BlockChain>>, hash: String) -> Option<Jso
 fn fetch_txnouts(chain_state: &State<Mutex<BlockChain>>, address: String) -> Json<Vec<TxnOut>> {
     let chain = chain_state.lock().unwrap();
     let mut db = get_db();
-    let txnouts = chain.txn_outs_by_address(&mut db, address.clone());
+    let txnouts = chain.txn_outs_by_address(&mut db, address.as_str());
     Json(txnouts)
 }
 
@@ -124,8 +137,28 @@ fn fetch_txnouts(chain_state: &State<Mutex<BlockChain>>, address: String) -> Jso
 fn get_balance(chain_state: &State<Mutex<BlockChain>>, address: String) -> Json<BalanceRespone> {
     let chain = chain_state.lock().unwrap();
     let mut db = get_db();
-    let balance = chain.balance_by_address(&mut db, address.clone());
+    let balance = chain.balance_by_address(&mut db, address.as_str());
     Json(BalanceRespone { address, balance })
+}
+
+#[get("/mempool")]
+fn mempool(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Transaction>> {
+    let chain = chain_state.lock().unwrap();
+    let mempool = chain.mempool();
+    Json(mempool)
+}
+
+#[post("/transactions", data = "<body>")]
+fn make_transaction(
+    body: Json<MakeTransactionBody>,
+    chain_state: &State<Mutex<BlockChain>>,
+) -> Status {
+    let mut chain = chain_state.lock().unwrap();
+    let mut db = get_db();
+    match chain.make_transaction(&mut db, body.from.as_str(), body.to.as_str(), body.amount) {
+        Ok(()) => Status::Created,
+        Err(_) => Status::BadRequest,
+    }
 }
 
 #[launch]
@@ -142,7 +175,9 @@ fn rocket() -> _ {
                 fetch_blocks,
                 get_block,
                 fetch_txnouts,
-                get_balance
+                get_balance,
+                mempool,
+                make_transaction
             ],
         )
         .manage(chain_mutex)

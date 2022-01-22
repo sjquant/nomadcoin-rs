@@ -4,11 +4,11 @@ GET http://localhost:8000/
 ### See all blocks
 GET http://localhost:8000/blocks
 
-### Add a block
+### Mine a block
 POST http://localhost:8000/blocks
 
 ### Get a block
-GET http://localhost:8000/blocks/34bb65aac5e5eca3ff3799b31b69a330bdd9afd7a8509c98de3a6296fd961323
+GET http://localhost:8000/blocks/06a26d575ca6c2e21aff8b2ab9612646263a84a0dee3c65a6ee1ad61c7686da1
 
 ### Get a nonexistent block
 GET http://localhost:8000/blocks/nonexistent-block
@@ -18,3 +18,15 @@ GET http://localhost:8000/addresses/todo-address/txnouts
 
 ### Get balance for an address
 GET http://localhost:8000/addresses/todo-address/balance
+
+### Get transactions inside blockchain memory pool
+GET http://localhost:8000/mempool
+
+### Make transaction inside blockchain memory pool
+POST http://localhost:8000/transactions
+
+{
+    "from": "todo-address",
+    "to": "my-address",
+    "amount": 35
+}
