@@ -1,10 +1,12 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
     block::Block,
     error::Error,
     repo,
-    transaction::{Transaction, TxnIn, TxnOut},
+    transaction::{Transaction, TxnIn, TxnOut, UTxnOut},
 };
 use pickledb::PickleDb;
 
@@ -97,18 +99,46 @@ impl BlockChain {
         }
         txn_outs
     }
-    pub fn txn_outs_by_address(&self, db: &mut PickleDb, address: &str) -> Vec<TxnOut> {
-        self.all_txn_outs(db)
-            .into_iter()
-            .filter(|txn_out| txn_out.owner == address.to_string())
-            .collect()
-    }
 
     pub fn balance_by_address(&self, db: &mut PickleDb, address: &str) -> u64 {
-        self.txn_outs_by_address(db, address)
+        self.unspent_txnouts_by_address(db, address)
             .iter()
             .map(|txn| txn.amount)
             .sum()
+    }
+
+    fn is_on_mempool(&self, utxnout: &UTxnOut) -> bool {
+        self.mempool.iter().any(|txn| {
+            txn.txn_ins
+                .iter()
+                .any(|txn_in| txn_in.txn_id == utxnout.txn_id && txn_in.idx == utxnout.idx)
+        })
+    }
+
+    pub fn unspent_txnouts_by_address(&self, db: &mut PickleDb, address: &str) -> Vec<UTxnOut> {
+        let mut utxnouts = vec![];
+        let mut existing_txn_ids: HashSet<&str> = HashSet::new();
+        for block in self.all_blocks(db).iter() {
+            for txn in block.transactions.iter() {
+                for txn_in in txn.txn_ins.iter() {
+                    if txn_in.owner.as_str() == address {
+                        existing_txn_ids.insert(txn_in.txn_id.as_str());
+                    }
+                }
+                for (idx, txn_out) in txn.txn_outs.clone().into_iter().enumerate() {
+                    if txn_out.owner.as_str() == address
+                        && !existing_txn_ids.contains(txn.id.as_str())
+                    {
+                        let utxnout =
+                            UTxnOut::new(&txn.id, idx.try_into().unwrap(), txn_out.amount);
+                        if !self.is_on_mempool(&utxnout) {
+                            utxnouts.push(utxnout);
+                        }
+                    }
+                }
+            }
+        }
+        utxnouts
     }
 
     pub fn make_transaction(
@@ -121,26 +151,29 @@ impl BlockChain {
         if self.balance_by_address(db, from) < amount {
             Err(Error::new("Not enough balance"))
         } else {
-            let old_txn_outs = self.txn_outs_by_address(db, from);
+            let utxn_outs = self.unspent_txnouts_by_address(db, from);
             let mut txn_ins: Vec<TxnIn> = vec![];
             let mut txn_outs: Vec<TxnOut> = vec![];
             let mut total = 0;
-            for each in old_txn_outs.into_iter() {
+            for utxnout in utxn_outs.into_iter() {
                 if total >= amount {
                     break;
                 }
-                txn_ins.push(TxnIn::new(from, each.amount));
-                total += each.amount;
+                txn_ins.push(TxnIn::new(
+                    &utxnout.txn_id,
+                    utxnout.idx,
+                    from,
+                    utxnout.amount,
+                ));
+                total += utxnout.amount;
             }
             // Bring changes back to transaction sender
             if total > amount {
                 txn_outs.push(TxnOut::new(from, total - amount));
             }
             txn_outs.push(TxnOut::new(to, amount));
-            if txn_ins.len() > 0 && txn_outs.len() > 0 {
-                let transaction = Transaction::new(txn_ins, txn_outs);
-                self.mempool.push(transaction);
-            }
+            let transaction = Transaction::new(txn_ins, txn_outs);
+            self.mempool.push(transaction);
             Ok(())
         }
     }

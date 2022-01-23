@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate rocket;
-use nomadcoin::{transaction::TxnOut, Block, BlockChain, Transaction};
+use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::{
     http::Status,
@@ -126,10 +126,10 @@ fn get_block(chain_state: &State<Mutex<BlockChain>>, hash: String) -> Option<Jso
 }
 
 #[get("/addresses/<address>/txnouts")]
-fn fetch_txnouts(chain_state: &State<Mutex<BlockChain>>, address: String) -> Json<Vec<TxnOut>> {
+fn fetch_txnouts(chain_state: &State<Mutex<BlockChain>>, address: String) -> Json<Vec<UTxnOut>> {
     let chain = chain_state.lock().unwrap();
     let mut db = get_db();
-    let txnouts = chain.txn_outs_by_address(&mut db, address.as_str());
+    let txnouts = chain.unspent_txnouts_by_address(&mut db, address.as_str());
     Json(txnouts)
 }
 

@@ -14,15 +14,39 @@ pub struct Transaction {
     pub txn_outs: Vec<TxnOut>,
 }
 
+impl Transaction {
+    pub fn from_coinbase(address: &str) -> Self {
+        let txn_ins = vec![TxnIn::new("", -1, "COINBASE", MINER_REWARD)];
+        let txn_outs = vec![TxnOut::new(address, MINER_REWARD)];
+        Transaction::new(txn_ins, txn_outs)
+    }
+
+    pub fn new(txn_ins: Vec<TxnIn>, txn_outs: Vec<TxnOut>) -> Self {
+        let timestamp = Utc::now().timestamp();
+        let payload = format!("{:?}{:?}{}", txn_ins, txn_outs, timestamp);
+        let hash = format!("{:x}", Sha256::digest(payload.as_bytes()));
+        Transaction {
+            id: hash,
+            timestamp,
+            txn_ins,
+            txn_outs,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 pub struct TxnIn {
+    pub txn_id: String,
+    pub idx: i64,
     pub owner: String,
     pub amount: u64,
 }
 
 impl TxnIn {
-    pub fn new(owner: &str, amount: u64) -> Self {
+    pub fn new(txn_id: &str, idx: i64, owner: &str, amount: u64) -> Self {
         Self {
+            txn_id: txn_id.to_string(),
+            idx: idx,
             owner: owner.to_string(),
             amount: amount,
         }
@@ -44,23 +68,20 @@ impl TxnOut {
     }
 }
 
-impl Transaction {
-    pub fn from_coinbase(address: &str) -> Self {
-        let txn_ins = vec![TxnIn::new("COINBASE", MINER_REWARD)];
-        let txn_outs = vec![TxnOut::new(address, MINER_REWARD)];
-        Transaction::new(txn_ins, txn_outs)
-    }
+// Unspent Transaction Out
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+pub struct UTxnOut {
+    pub txn_id: String,
+    pub idx: i64,
+    pub amount: u64,
+}
 
-    pub fn new(txn_ins: Vec<TxnIn>, txn_outs: Vec<TxnOut>) -> Self {
-        let timestamp = Utc::now().timestamp();
-        let payload = format!("{:?}{:?}{}", txn_ins, txn_outs, timestamp);
-        let id = format!("{:x}", Sha256::digest(payload.as_bytes()));
-
-        Transaction {
-            id,
-            timestamp,
-            txn_ins,
-            txn_outs,
+impl UTxnOut {
+    pub fn new(txn_id: &str, idx: i64, amount: u64) -> Self {
+        Self {
+            txn_id: txn_id.to_string(),
+            idx: idx,
+            amount: amount,
         }
     }
 }
@@ -77,7 +98,7 @@ mod tests {
             Transaction {
                 id: txn.id.clone(),
                 timestamp: txn.timestamp,
-                txn_ins: vec![TxnIn::new("COINBASE", MINER_REWARD)],
+                txn_ins: vec![TxnIn::new("", -1, "COINBASE", MINER_REWARD)],
                 txn_outs: vec![TxnOut::new("my-address", MINER_REWARD)]
             }
         );
