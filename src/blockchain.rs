@@ -17,7 +17,7 @@ pub struct BlockChain {
     pub newest_hash: String,
     pub height: u64,
     pub difficulty: u16,
-    mempool: Vec<Transaction>,
+    pub mempool: Vec<Transaction>,
 }
 
 impl BlockChain {
@@ -42,10 +42,12 @@ impl BlockChain {
             self.newest_hash.clone(),
             self.height + 1,
             self.calc_difficulty(db),
+            &mut self.mempool,
         );
         repo::save_block(db, block.hash.clone(), &block);
         self.newest_hash = block.hash;
         self.height = block.height;
+        self.mempool = vec![];
         self.create_checkpoint(db);
     }
 
@@ -128,20 +130,19 @@ impl BlockChain {
                     break;
                 }
                 txn_ins.push(TxnIn::new(from, each.amount));
-                txn_outs.push(TxnOut::new(to, each.amount));
                 total += each.amount;
             }
+            // Bring changes back to transaction sender
             if total > amount {
                 txn_outs.push(TxnOut::new(from, total - amount));
             }
-            let transaction = Transaction::new(txn_ins, txn_outs);
-            self.mempool.push(transaction);
+            txn_outs.push(TxnOut::new(to, amount));
+            if txn_ins.len() > 0 && txn_outs.len() > 0 {
+                let transaction = Transaction::new(txn_ins, txn_outs);
+                self.mempool.push(transaction);
+            }
             Ok(())
         }
-    }
-
-    pub fn mempool(&self) -> Vec<Transaction> {
-        self.mempool.clone()
     }
 }
 
@@ -186,7 +187,7 @@ mod tests {
         chain.add_block(&mut db);
 
         // Then
-        let expected = Block::mine(String::from(""), 1, 1);
+        let expected = Block::mine(String::from(""), 1, 1, &mut vec![]);
         let actual = chain.get_block(&mut db, expected.hash.clone()).unwrap();
         assert_eq!(actual, expected);
     }

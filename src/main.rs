@@ -144,7 +144,7 @@ fn get_balance(chain_state: &State<Mutex<BlockChain>>, address: String) -> Json<
 #[get("/mempool")]
 fn mempool(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Transaction>> {
     let chain = chain_state.lock().unwrap();
-    let mempool = chain.mempool();
+    let mempool = chain.mempool.clone();
     Json(mempool)
 }
 

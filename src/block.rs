@@ -16,19 +16,27 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn mine(prev_hash: String, height: u64, difficulty: u16) -> Self {
+    pub fn mine(
+        prev_hash: String,
+        height: u64,
+        difficulty: u16,
+        mempool: &mut Vec<Transaction>,
+    ) -> Self {
         let mut nonce: u64 = 0;
         let mut payload;
         let mut hash = String::from("");
         let target = std::iter::repeat("0")
             .take(difficulty.into())
             .collect::<String>();
-        let txn = Transaction::from_coinbase("todo-address");
+        let mut txns = vec![];
+        let coinbase_txn = Transaction::from_coinbase("todo-address");
+        txns.push(coinbase_txn);
+        txns.append(mempool);
         loop {
             if hash.starts_with(&target) {
                 break;
             }
-            payload = format!("{}{}{}{}{}", txn.id, prev_hash, height, difficulty, nonce);
+            payload = format!("{}{}{}{}{:?}", prev_hash, height, difficulty, nonce, txns);
             hash = format!("{:x}", Sha256::digest(payload.as_bytes()));
             nonce += 1;
         }
@@ -40,7 +48,7 @@ impl Block {
             difficulty: difficulty,
             nonce: nonce,
             timestamp: Utc::now().timestamp(),
-            transactions: vec![txn],
+            transactions: txns,
         }
     }
 }
@@ -51,7 +59,7 @@ mod tests {
 
     #[test]
     fn test_mine_block() {
-        let block = Block::mine(String::from("a-prev-hash"), 10, 2);
+        let block = Block::mine(String::from("a-prev-hash"), 10, 2, &mut vec![]);
         assert_eq!(
             block,
             Block {
