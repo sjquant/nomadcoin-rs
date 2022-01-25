@@ -2,7 +2,7 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct Error {
-    msg: String,
+    pub msg: String,
 }
 
 impl Error {

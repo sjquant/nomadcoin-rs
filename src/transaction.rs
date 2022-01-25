@@ -85,22 +85,3 @@ impl UTxnOut {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_coinbase_transaction() {
-        let txn = Transaction::from_coinbase("my-address");
-        assert_eq!(
-            txn,
-            Transaction {
-                id: txn.id.clone(),
-                timestamp: txn.timestamp,
-                txn_ins: vec![TxnIn::new("", -1, "COINBASE", MINER_REWARD)],
-                txn_outs: vec![TxnOut::new("my-address", MINER_REWARD)]
-            }
-        );
-    }
-}

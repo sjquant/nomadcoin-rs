@@ -213,28 +213,75 @@ mod tests {
 
     #[test]
     fn add_block() {
+        // Given
         let (_r, mut db) = test_utils::test_db();
 
         // When
         let mut chain = BlockChain::get(&mut db);
         chain.add_block(&mut db);
+        chain.add_block(&mut db);
 
         // Then
-        let expected = Block::mine(String::from(""), 1, 1, &mut vec![]);
-        let actual = chain.get_block(&mut db, expected.hash.clone()).unwrap();
-        assert_eq!(actual, expected);
+        let blocks = chain.all_blocks(&mut db);
+        assert_eq!(blocks.len(), 2);
     }
 
     #[test]
-    fn all_blocks() {
+    fn make_transaction() {
         // Given
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db);
-        chain.add_block(&mut db);
+        chain.add_block(&mut db); // Earn 50 by mining block
+
+        // When
+        chain
+            .make_transaction(&mut db, "todo-address", "john", 20)
+            .unwrap();
 
         // Then
-        let actual = chain.all_blocks(&mut db);
-        assert_eq!(actual.len(), 2);
+        let mempool = chain.mempool[0].clone();
+        assert_eq!(chain.balance_by_address(&mut db, "todo-address"), 0); // balance not yet changed
+        assert_eq!(mempool.txn_ins[0].owner, String::from("todo-address"));
+        assert_eq!(mempool.txn_ins[0].amount, 50);
+        assert_eq!(mempool.txn_outs[0].owner, String::from("todo-address"));
+        assert_eq!(mempool.txn_outs[0].amount, 30);
+        assert_eq!(mempool.txn_outs[1].owner, String::from("john"));
+        assert_eq!(mempool.txn_outs[1].amount, 20);
+    }
+
+    #[test]
+    fn add_block_confirms_transaction() {
+        // Given
+        let (_r, mut db) = test_utils::test_db();
+        let mut chain = BlockChain::get(&mut db);
+        chain.add_block(&mut db); // Earn 50 by mining block
+        chain
+            .make_transaction(&mut db, "todo-address", "john", 20)
+            .unwrap();
+
+        // When
+        chain.add_block(&mut db); // Earn another 50 by mining block
+
+        // Then
+        assert_eq!(chain.balance_by_address(&mut db, "todo-address"), 80);
+        assert_eq!(chain.balance_by_address(&mut db, "john"), 20);
+        assert_eq!(chain.mempool.len(), 0);
+    }
+
+    #[test]
+    fn cannot_make_transaction_when_balance_is_not_enough() {
+        // Given
+        let (_r, mut db) = test_utils::test_db();
+        let mut chain = BlockChain::get(&mut db);
+        // Earn 50 by mining block
+        chain.add_block(&mut db);
+
+        // When
+        let err = chain
+            .make_transaction(&mut db, "todo-address", "TO", 60)
+            .unwrap_err();
+
+        // Then
+        assert_eq!(err.msg, String::from("Not enough balance"));
     }
 }

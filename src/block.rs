@@ -52,25 +52,3 @@ impl Block {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_mine_block() {
-        let block = Block::mine(String::from("a-prev-hash"), 10, 2, &mut vec![]);
-        assert_eq!(
-            block,
-            Block {
-                prev_hash: String::from("a-prev-hash"),
-                hash: block.hash.clone(),
-                height: 10,
-                difficulty: 2,
-                nonce: block.nonce,
-                timestamp: block.timestamp,
-                transactions: block.transactions.clone()
-            }
-        );
-    }
-}
