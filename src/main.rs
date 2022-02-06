@@ -190,7 +190,13 @@ use sha2::{Digest, Sha256};
 // }
 
 fn main() {
-    let private_key = SigningKey::random(&mut OsRng);
+    let SIGNATURE ="3F1383D3E8C23FC3683B5F88A84006741A43DDF19B8925BADFEF79C7FEBA86C3CA6BAD1EFC2873CD2F24245A79906257E419806861137F22ED521216243A3DF2";
+    let PRIVATE_KEY = "341561634f901ac1226bb7b69a9d771590138ebf41ae2479820774e8b4363835";
+    let HASHED_MESSAGE = "c33084feaa65adbbbebd0c9bf292a26ffc6dea97b170d88e501ab4865591aafd";
+
+    let private_key_as_bytes = &hex::decode(PRIVATE_KEY).unwrap();
+    let private_key = SigningKey::from_bytes(private_key_as_bytes).unwrap();
+    // let private_key = SigningKey::random(&mut OsRng);
     let hashed_msg = Sha256::digest(b"I love you");
     let signature: Signature = private_key.sign(&hashed_msg);
     let public_key = private_key.verifying_key();
