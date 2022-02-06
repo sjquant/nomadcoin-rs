@@ -1,8 +1,7 @@
 use p256::ecdsa::{
-    signature::{Signer, Verifier},
-    Signature, SigningKey,
+    signature::{Signature, Verifier},
+    SigningKey,
 };
-use rand_core::OsRng;
 use sha2::{Digest, Sha256};
 // #[macro_use]
 // extern crate rocket;
@@ -196,15 +195,11 @@ fn main() {
 
     let private_key_as_bytes = &hex::decode(PRIVATE_KEY).unwrap();
     let private_key = SigningKey::from_bytes(private_key_as_bytes).unwrap();
-    // let private_key = SigningKey::random(&mut OsRng);
-    let hashed_msg = Sha256::digest(b"I love you");
-    let signature: Signature = private_key.sign(&hashed_msg);
     let public_key = private_key.verifying_key();
-    println!("PrivateKey: {}", hex::encode(private_key.to_bytes()));
-    println!("HashedMsg: {}", hex::encode(&hashed_msg));
-    println!("Signature: {}", signature.to_string());
-    println!("R: {}, S: {}", signature.r(), signature.s());
-    match public_key.verify(&Sha256::digest(b"I love you"), &signature) {
+    let signature_as_bytes = &hex::decode(SIGNATURE).unwrap();
+    let signature = Signature::from_bytes(signature_as_bytes).unwrap();
+    let hashed_msg_as_bytes = &hex::decode(HASHED_MESSAGE).unwrap();
+    match public_key.verify(hashed_msg_as_bytes, &signature) {
         Ok(_) => {
             println!("Verified!")
         }
