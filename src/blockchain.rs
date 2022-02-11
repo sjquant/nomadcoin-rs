@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use crate::{
     block::Block,
     error::Error,
-    repo,
     transaction::{Transaction, TxnIn, TxnOut, UTxnOut},
 };
 use pickledb::PickleDb;
@@ -24,7 +23,7 @@ pub struct BlockChain {
 
 impl BlockChain {
     pub fn get(db: &mut PickleDb) -> Self {
-        match repo::checkpoint(db) {
+        match db.get::<BlockChain>("checkpoint") {
             Some(blockchain) => blockchain,
             None => {
                 let blockchain = BlockChain {
@@ -46,7 +45,8 @@ impl BlockChain {
             self.calc_difficulty(db),
             &mut self.mempool,
         );
-        repo::save_block(db, block.hash.clone(), &block);
+        db.set(format!("block:{}", block.hash).as_str(), &block)
+            .unwrap();
         self.newest_hash = block.hash;
         self.height = block.height;
         self.mempool = vec![];
@@ -54,7 +54,7 @@ impl BlockChain {
     }
 
     fn create_checkpoint(&self, db: &mut PickleDb) {
-        repo::save_blockchain(db, self);
+        db.set("checkpoint", self).unwrap();
     }
 
     pub fn all_blocks(&self, db: &mut PickleDb) -> Vec<Block> {
@@ -70,7 +70,7 @@ impl BlockChain {
     }
 
     pub fn get_block(&self, db: &mut PickleDb, hash: String) -> Option<Block> {
-        repo::get_block(db, hash)
+        db.get::<Block>(format!("block:{}", hash).as_str())
     }
 
     fn calc_difficulty(&mut self, db: &mut PickleDb) -> u16 {
