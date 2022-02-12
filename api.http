@@ -7,8 +7,12 @@ GET http://localhost:8000/blocks
 ### Mine a block
 POST http://localhost:8000/blocks
 
+{
+    "address": "todo-address"
+}
+
 ### Get a block
-GET http://localhost:8000/blocks/06a26d575ca6c2e21aff8b2ab9612646263a84a0dee3c65a6ee1ad61c7686da1
+GET http://localhost:8000/blocks/09c213bbcef93f4a4513d02b9502799efe2692fc4b7b92748c1cbc72a0780333
 
 ### Get a nonexistent block
 GET http://localhost:8000/blocks/nonexistent-block

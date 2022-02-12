@@ -25,6 +25,11 @@ struct BalanceRespone {
 }
 
 #[derive(Deserialize)]
+struct MineBlockBody {
+    address: String,
+}
+
+#[derive(Deserialize)]
 struct MakeTransactionBody {
     from: String,
     to: String,
@@ -107,11 +112,11 @@ fn fetch_blocks(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Block>> {
     Json(blocks)
 }
 
-#[post("/blocks")]
-fn add_block(chain_state: &State<Mutex<BlockChain>>) -> Status {
+#[post("/blocks", data = "<body>")]
+fn add_block(body: Json<MineBlockBody>, chain_state: &State<Mutex<BlockChain>>) -> Status {
     let mut chain = chain_state.lock().unwrap();
     let mut db = get_db();
-    chain.add_block(&mut db);
+    chain.add_block(&mut db, body.address.as_str());
     Status::Created
 }
 

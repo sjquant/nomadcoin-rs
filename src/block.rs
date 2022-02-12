@@ -17,6 +17,7 @@ pub struct Block {
 
 impl Block {
     pub fn mine(
+        address: &str,
         prev_hash: String,
         height: u64,
         difficulty: u16,
@@ -29,7 +30,7 @@ impl Block {
             .take(difficulty.into())
             .collect::<String>();
         let mut txns = vec![];
-        let coinbase_txn = Transaction::from_coinbase("todo-address");
+        let coinbase_txn = Transaction::from_coinbase(address);
         txns.push(coinbase_txn);
         txns.append(mempool);
         loop {

@@ -31,7 +31,6 @@ impl Wallet {
     pub fn get(filename: &str) -> Self {
         let private_key: SigningKey;
         if Path::new(filename).exists() {
-            println!("??");
             private_key = read_key_from_file(filename)
         } else {
             private_key = SigningKey::random(&mut OsRng);

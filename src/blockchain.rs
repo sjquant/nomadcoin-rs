@@ -38,8 +38,9 @@ impl BlockChain {
         }
     }
 
-    pub fn add_block(&mut self, db: &mut PickleDb) {
+    pub fn add_block(&mut self, db: &mut PickleDb, address: &str) {
         let block = Block::mine(
+            address,
             self.newest_hash.clone(),
             self.height + 1,
             self.calc_difficulty(db),
@@ -200,8 +201,8 @@ mod tests {
 
         {
             let mut chain = BlockChain::get(&mut db);
-            chain.add_block(&mut db);
-            chain.add_block(&mut db);
+            chain.add_block(&mut db, "some-address");
+            chain.add_block(&mut db, "some-address");
         }
 
         // When
@@ -218,8 +219,8 @@ mod tests {
 
         // When
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db);
-        chain.add_block(&mut db);
+        chain.add_block(&mut db, "some-address");
+        chain.add_block(&mut db, "some-address");
 
         // Then
         let blocks = chain.all_blocks(&mut db);
@@ -231,21 +232,21 @@ mod tests {
         // Given
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db); // Earn 50 by mining block
+        chain.add_block(&mut db, "from-address"); // Earn 50 by mining block
 
         // When
         chain
-            .make_transaction(&mut db, "todo-address", "john", 20)
+            .make_transaction(&mut db, "from-address", "to-address", 20)
             .unwrap();
 
         // Then
         let mempool = chain.mempool[0].clone();
-        assert_eq!(chain.balance_by_address(&mut db, "todo-address"), 0); // balance not yet changed
-        assert_eq!(mempool.txn_ins[0].owner, String::from("todo-address"));
+        assert_eq!(chain.balance_by_address(&mut db, "from-address"), 0); // balance not yet changed
+        assert_eq!(mempool.txn_ins[0].owner, String::from("from-address"));
         assert_eq!(mempool.txn_ins[0].amount, 50);
-        assert_eq!(mempool.txn_outs[0].owner, String::from("todo-address"));
+        assert_eq!(mempool.txn_outs[0].owner, String::from("from-address"));
         assert_eq!(mempool.txn_outs[0].amount, 30);
-        assert_eq!(mempool.txn_outs[1].owner, String::from("john"));
+        assert_eq!(mempool.txn_outs[1].owner, String::from("to-address"));
         assert_eq!(mempool.txn_outs[1].amount, 20);
     }
 
@@ -254,16 +255,16 @@ mod tests {
         // Given
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db); // Earn 50 by mining block
+        chain.add_block(&mut db, "from-address"); // Earn 50 by mining block
         chain
-            .make_transaction(&mut db, "todo-address", "john", 20)
+            .make_transaction(&mut db, "from-address", "john", 20)
             .unwrap();
 
         // When
-        chain.add_block(&mut db); // Earn another 50 by mining block
+        chain.add_block(&mut db, "from-address"); // Earn another 50 by mining block
 
         // Then
-        assert_eq!(chain.balance_by_address(&mut db, "todo-address"), 80);
+        assert_eq!(chain.balance_by_address(&mut db, "from-address"), 80);
         assert_eq!(chain.balance_by_address(&mut db, "john"), 20);
         assert_eq!(chain.mempool.len(), 0);
     }
@@ -274,11 +275,11 @@ mod tests {
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
         // Earn 50 by mining block
-        chain.add_block(&mut db);
+        chain.add_block(&mut db, "from-address");
 
         // When
         let err = chain
-            .make_transaction(&mut db, "todo-address", "TO", 60)
+            .make_transaction(&mut db, "from-address", "to-address", 60)
             .unwrap_err();
 
         // Then
