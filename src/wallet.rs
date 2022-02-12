@@ -1,4 +1,4 @@
-use p256::ecdsa::SigningKey;
+use p256::ecdsa::{signature::Signer, SigningKey};
 use rand_core::OsRng;
 use std::{
     io::{Read, Write},
@@ -23,10 +23,6 @@ fn store_key_to_file(filename: &str, key: &SigningKey) -> std::io::Result<()> {
     Ok(())
 }
 
-fn public_key_from_private_key(key: &SigningKey) -> String {
-    key.verifying_key().to_encoded_point(false).to_string()
-}
-
 impl Wallet {
     pub fn get(filename: &str) -> Self {
         let private_key: SigningKey;
@@ -36,16 +32,25 @@ impl Wallet {
             private_key = SigningKey::random(&mut OsRng);
             store_key_to_file(filename, &private_key).unwrap();
         }
-        let address = public_key_from_private_key(&private_key);
+        let address = private_key
+            .verifying_key()
+            .to_encoded_point(false)
+            .to_string();
         Wallet {
             private_key,
             address,
         }
     }
+
+    pub fn sign(&self, payload: &[u8]) -> String {
+        self.private_key.sign(payload).to_string()
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use p256::ecdsa::signature::{Signature, Verifier};
+
     use super::*;
     use crate::test_utils;
 
@@ -76,6 +81,29 @@ mod tests {
 
         // Then
         assert_eq!(wallet.private_key, a_key);
+
+        // Teardown
+        std::fs::remove_file(&filename).unwrap();
+    }
+
+    #[test]
+    fn sign_data() {
+        let filename = test_utils::random_string(16);
+        // Given
+        let wallet = Wallet::get(&filename);
+        let hashed_string = hex::encode("hello, world");
+        let data = &hex::decode(hashed_string).unwrap();
+        // When
+        let signature_as_string = wallet.sign(data);
+
+        // Then
+        let signature_as_bytes = &hex::decode(signature_as_string).unwrap();
+        let signature = Signature::from_bytes(&signature_as_bytes).unwrap();
+        assert!(wallet
+            .private_key
+            .verifying_key()
+            .verify(data, &signature)
+            .is_ok());
 
         // Teardown
         std::fs::remove_file(&filename).unwrap();
