@@ -4,6 +4,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::Wallet;
+
 const MINER_REWARD: u64 = 50;
 
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
@@ -16,7 +18,9 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn from_coinbase(address: &str) -> Self {
-        let txn_ins = vec![TxnIn::new("", -1, "COINBASE", MINER_REWARD)];
+        let mut coinbase_txn_in = TxnIn::new("", -1, MINER_REWARD);
+        coinbase_txn_in.sign("COINBASE");
+        let txn_ins = vec![coinbase_txn_in];
         let txn_outs = vec![TxnOut::new(address, MINER_REWARD)];
         Transaction::new(txn_ins, txn_outs)
     }
@@ -32,37 +36,49 @@ impl Transaction {
             txn_outs,
         }
     }
+
+    pub fn sign(&mut self, wallet: Wallet) {
+        let msg = hex::encode(&self.id);
+        let signature = wallet.sign(msg.as_str());
+        for txn_in in &mut self.txn_ins {
+            txn_in.sign(&signature);
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 pub struct TxnIn {
     pub txn_id: String,
     pub idx: i64,
-    pub owner: String,
     pub amount: u64,
+    pub signature: String,
 }
 
 impl TxnIn {
-    pub fn new(txn_id: &str, idx: i64, owner: &str, amount: u64) -> Self {
+    pub fn new(txn_id: &str, idx: i64, amount: u64) -> Self {
         Self {
             txn_id: txn_id.to_string(),
             idx: idx,
-            owner: owner.to_string(),
+            signature: String::from(""), // Unsignd yet
             amount: amount,
         }
+    }
+
+    pub fn sign(&mut self, signature: &str) {
+        self.signature = signature.to_string();
     }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 pub struct TxnOut {
-    pub owner: String,
+    pub address: String,
     pub amount: u64,
 }
 
 impl TxnOut {
-    pub fn new(owner: &str, amount: u64) -> Self {
+    pub fn new(address: &str, amount: u64) -> Self {
         Self {
-            owner: owner.to_string(),
+            address: address.to_string(),
             amount: amount,
         }
     }

@@ -42,8 +42,9 @@ impl Wallet {
         }
     }
 
-    pub fn sign(&self, payload: &[u8]) -> String {
-        self.private_key.sign(payload).to_string()
+    pub fn sign(&self, payload: &str) -> String {
+        let msg_as_bytes = &hex::decode(payload).unwrap();
+        self.private_key.sign(msg_as_bytes).to_string()
     }
 }
 
@@ -88,17 +89,17 @@ mod tests {
 
     #[test]
     fn sign_data() {
-        let filename = test_utils::random_string(16);
         // Given
+        let filename = test_utils::random_string(16);
         let wallet = Wallet::get(&filename);
         let hashed_string = hex::encode("hello, world");
-        let data = &hex::decode(hashed_string).unwrap();
         // When
-        let signature_as_string = wallet.sign(data);
+        let signature_as_string = wallet.sign(hashed_string.as_str());
 
         // Then
         let signature_as_bytes = &hex::decode(signature_as_string).unwrap();
         let signature = Signature::from_bytes(&signature_as_bytes).unwrap();
+        let data = &hex::decode(hashed_string).unwrap();
         assert!(wallet
             .private_key
             .verifying_key()

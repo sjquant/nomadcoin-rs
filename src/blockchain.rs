@@ -1,17 +1,30 @@
-use std::collections::HashSet;
-
+use p256::ecdsa::{
+    signature::{Signature, Verifier},
+    VerifyingKey,
+};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 use crate::{
     block::Block,
     error::Error,
     transaction::{Transaction, TxnIn, TxnOut, UTxnOut},
+    Wallet,
 };
 use pickledb::PickleDb;
 
 const DIFFICULTY_INTERVAL: u64 = 5;
 const TIME_THRESHOLD: i64 = 36000;
 const ALLOWED_BUFFER: i64 = 7200;
+
+fn verify_msg(public_key_str: &str, msg: &str, signature_str: &str) -> bool {
+    let public_key_as_bytes = &hex::decode(public_key_str).unwrap();
+    let public_key = VerifyingKey::from_sec1_bytes(public_key_as_bytes).unwrap();
+    let signature_as_bytes = &hex::decode(signature_str).unwrap();
+    let signature = Signature::from_bytes(signature_as_bytes).unwrap();
+    let msg_as_bytes = &hex::decode(msg).unwrap();
+    public_key.verify(msg_as_bytes, &signature).is_ok()
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct BlockChain {
@@ -122,12 +135,16 @@ impl BlockChain {
         for block in self.all_blocks(db).iter() {
             for txn in block.transactions.iter() {
                 for txn_in in txn.txn_ins.iter() {
-                    if txn_in.owner.as_str() == address {
+                    if txn_in.signature.as_str() == "COINBASE" {
+                        break;
+                    }
+
+                    if txn.txn_outs[txn_in.idx as usize].address == address {
                         existing_txn_ids.insert(txn_in.txn_id.as_str());
                     }
                 }
                 for (idx, txn_out) in txn.txn_outs.clone().into_iter().enumerate() {
-                    if txn_out.owner.as_str() == address
+                    if txn_out.address.as_str() == address
                         && !existing_txn_ids.contains(txn.id.as_str())
                     {
                         let utxnout =
@@ -140,6 +157,35 @@ impl BlockChain {
             }
         }
         utxnouts
+    }
+
+    fn get_transaction(&self, db: &mut PickleDb, id: &str) -> Option<Transaction> {
+        let blocks = self.all_blocks(db);
+        for block in blocks.iter() {
+            for txn in block.transactions.iter() {
+                if txn.id == id {
+                    return Some(txn.clone());
+                }
+            }
+        }
+        None
+    }
+
+    fn validate_transaction(&self, db: &mut PickleDb, txn: &Transaction) -> bool {
+        for txn_in in txn.txn_ins.iter() {
+            match self.get_transaction(db, txn_in.txn_id.as_str()) {
+                Some(prev_txn) => {
+                    let address = prev_txn.txn_outs[txn_in.idx as usize].address.as_str();
+                    let signature = txn_in.signature.as_str();
+                    let msg = hex::encode(&txn.id);
+                    if !verify_msg(address, msg.as_str(), signature) {
+                        return false;
+                    }
+                }
+                None => return false,
+            }
+        }
+        true
     }
 
     pub fn make_transaction(
@@ -160,12 +206,7 @@ impl BlockChain {
                 if total >= amount {
                     break;
                 }
-                txn_ins.push(TxnIn::new(
-                    &utxnout.txn_id,
-                    utxnout.idx,
-                    from,
-                    utxnout.amount,
-                ));
+                txn_ins.push(TxnIn::new(&utxnout.txn_id, utxnout.idx, utxnout.amount));
                 total += utxnout.amount;
             }
             // Bring changes back to transaction sender
@@ -173,7 +214,11 @@ impl BlockChain {
                 txn_outs.push(TxnOut::new(from, total - amount));
             }
             txn_outs.push(TxnOut::new(to, amount));
-            let transaction = Transaction::new(txn_ins, txn_outs);
+            let mut transaction = Transaction::new(txn_ins, txn_outs);
+            transaction.sign(Wallet::get("nico.wallet"));
+            if !self.validate_transaction(db, &transaction) {
+                return Err(Error::new("Invalid transaction"));
+            };
             self.mempool.push(transaction);
             Ok(())
         }
@@ -232,22 +277,23 @@ mod tests {
         // Given
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db, "from-address"); // Earn 50 by mining block
+        let wallet = Wallet::get("nico.wallet");
+        let address = wallet.address.as_str();
+        chain.add_block(&mut db, address); // Earn 50 by mining block
 
         // When
         chain
-            .make_transaction(&mut db, "from-address", "to-address", 20)
+            .make_transaction(&mut db, address, "to-address", 20)
             .unwrap();
 
         // Then
-        let mempool = chain.mempool[0].clone();
-        assert_eq!(chain.balance_by_address(&mut db, "from-address"), 0); // balance not yet changed
-        assert_eq!(mempool.txn_ins[0].owner, String::from("from-address"));
-        assert_eq!(mempool.txn_ins[0].amount, 50);
-        assert_eq!(mempool.txn_outs[0].owner, String::from("from-address"));
-        assert_eq!(mempool.txn_outs[0].amount, 30);
-        assert_eq!(mempool.txn_outs[1].owner, String::from("to-address"));
-        assert_eq!(mempool.txn_outs[1].amount, 20);
+        let mem_txn = chain.mempool[0].clone();
+        assert_eq!(chain.balance_by_address(&mut db, address), 0); // balance not yet changed
+        assert_eq!(mem_txn.txn_ins[0].amount, 50);
+        assert_eq!(mem_txn.txn_outs[0].address, String::from(address));
+        assert_eq!(mem_txn.txn_outs[0].amount, 30);
+        assert_eq!(mem_txn.txn_outs[1].address, String::from("to-address"));
+        assert_eq!(mem_txn.txn_outs[1].amount, 20);
     }
 
     #[test]
@@ -255,16 +301,18 @@ mod tests {
         // Given
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db, "from-address"); // Earn 50 by mining block
+        let wallet = Wallet::get("nico.wallet");
+        let address = wallet.address.as_str();
+        chain.add_block(&mut db, address); // Earn 50 by mining block
         chain
-            .make_transaction(&mut db, "from-address", "john", 20)
+            .make_transaction(&mut db, address, "john", 20)
             .unwrap();
 
         // When
-        chain.add_block(&mut db, "from-address"); // Earn another 50 by mining block
+        chain.add_block(&mut db, address); // Earn another 50 by mining block
 
         // Then
-        assert_eq!(chain.balance_by_address(&mut db, "from-address"), 80);
+        assert_eq!(chain.balance_by_address(&mut db, address), 80);
         assert_eq!(chain.balance_by_address(&mut db, "john"), 20);
         assert_eq!(chain.mempool.len(), 0);
     }
@@ -274,12 +322,15 @@ mod tests {
         // Given
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
+        let wallet = Wallet::get("nico.wallet");
+        let address = wallet.address.as_str();
+
         // Earn 50 by mining block
-        chain.add_block(&mut db, "from-address");
+        chain.add_block(&mut db, address);
 
         // When
         let err = chain
-            .make_transaction(&mut db, "from-address", "to-address", 60)
+            .make_transaction(&mut db, address, "to-address", 60)
             .unwrap_err();
 
         // Then
