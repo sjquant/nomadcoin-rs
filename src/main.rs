@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate rocket;
-use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction};
+use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::{
     http::Status,
@@ -14,8 +14,6 @@ struct URLDescription {
     url: String,
     method: String,
     description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    payload: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -62,43 +60,46 @@ fn documentation() -> Json<Vec<URLDescription>> {
             url: url("/"),
             method: String::from("GET"),
             description: String::from("See Documentation"),
-            payload: None,
         },
         URLDescription {
             url: url("/blocks"),
             method: String::from("GET"),
             description: String::from("See All Blocks"),
-            payload: None,
         },
         URLDescription {
             url: url("/blocks"),
             method: String::from("POST"),
             description: String::from("Add A Block"),
-            payload: None,
         },
         URLDescription {
-            url: url("/blocks/<id>"),
+            url: url("/blocks/<hash>"),
             method: String::from("GET"),
             description: String::from("See A Block"),
-            payload: None,
         },
         URLDescription {
             url: url("/addresses/<address>/txnouts"),
             method: String::from("GET"),
             description: String::from("Get transaction outputs for an address"),
-            payload: None,
         },
         URLDescription {
             url: url("/addresses/<address>/balance"),
             method: String::from("GET"),
             description: String::from("Get balance for an address"),
-            payload: None,
         },
         URLDescription {
             url: url("/mempool"),
             method: String::from("GET"),
             description: String::from("Get transactions inside blockchain memory pool"),
-            payload: None,
+        },
+        URLDescription {
+            url: url("/transactions"),
+            method: String::from("POST"),
+            description: String::from("Make a transaction"),
+        },
+        URLDescription {
+            url: url("/wallet"),
+            method: String::from("GET"),
+            description: String::from("See my wallet"),
         },
     ];
     Json(data)
@@ -166,6 +167,12 @@ fn make_transaction(
     }
 }
 
+#[get("/my-wallet")]
+fn my_wallet() -> String {
+    let wallet = Wallet::get("nico.wallet");
+    wallet.address
+}
+
 #[launch]
 fn rocket() -> _ {
     let mut db = get_db();
@@ -182,7 +189,8 @@ fn rocket() -> _ {
                 fetch_txnouts,
                 get_balance,
                 mempool,
-                make_transaction
+                make_transaction,
+                my_wallet
             ],
         )
         .manage(chain_mutex)

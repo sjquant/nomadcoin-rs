@@ -8,20 +8,20 @@ GET http://localhost:8000/blocks
 POST http://localhost:8000/blocks
 
 {
-    "address": "todo-address"
+    "address": "0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975"
 }
 
 ### Get a block
-GET http://localhost:8000/blocks/09c213bbcef93f4a4513d02b9502799efe2692fc4b7b92748c1cbc72a0780333
+GET http://localhost:8000/blocks/0418507744796776a53b8868c70727027f12289d0e3c5aed99af6ffc9c18fb3b
 
 ### Get a nonexistent block
 GET http://localhost:8000/blocks/nonexistent-block
 
 ### Get transaction outputs for an address
-GET http://localhost:8000/addresses/todo-address/txnouts
+GET http://localhost:8000/addresses/0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975/txnouts
 
 ### Get balance for an address
-GET http://localhost:8000/addresses/todo-address/balance
+GET http://localhost:8000/addresses/0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975/balance
 
 ### Get transactions inside blockchain memory pool
 GET http://localhost:8000/mempool
@@ -30,7 +30,10 @@ GET http://localhost:8000/mempool
 POST http://localhost:8000/transactions
 
 {
-    "from": "todo-address",
+    "from": "0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975",
     "to": "my-address",
     "amount": 35
 }
+
+### Get my wallet address
+GET http://localhost:8000/my-wallet
