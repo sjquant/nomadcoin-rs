@@ -37,3 +37,14 @@ POST http://localhost:8000/transactions
 
 ### Get my wallet address
 GET http://localhost:8000/my-wallet
+
+
+### Connect to server-side-events
+GET http://localhost:8000/sse
+
+### Send message to server-side-events
+POST http://localhost:8000/sse
+    
+{
+    "message": "Hello, world!"
+}

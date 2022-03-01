@@ -2,12 +2,13 @@
 extern crate rocket;
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
-use rocket::{
-    http::Status,
-    serde::{json::Json, Deserialize, Serialize},
-    State,
-};
+use rocket::http::Status;
+use rocket::serde::{json::Json, Deserialize, Serialize};
+use rocket::State;
+use rocket::response::stream::{EventStream, Event};
+use rocket::tokio::sync::broadcast::{channel, Sender, error::RecvError};
 use std::sync::Mutex;
+use rocket::tokio::select;
 
 #[derive(Serialize)]
 struct URLDescription {
@@ -32,6 +33,11 @@ struct MakeTransactionBody {
     from: String,
     to: String,
     amount: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SSEMessage {
+    message: String,
 }
 
 fn url(path: &str) -> String {
@@ -173,11 +179,39 @@ fn my_wallet() -> String {
     wallet.address
 }
 
+
+#[get("/sse")]
+async fn sse_get(queue: &State<Sender<SSEMessage>>) -> EventStream![] {
+    println!("Connected");
+    let mut rx = queue.subscribe();
+    EventStream! {
+        loop {
+            let msg = select! {
+                data = rx.recv() => match data {
+                    Ok(data) => data.message,
+                    Err(RecvError::Closed) => break,
+                    Err(RecvError::Lagged(_)) => continue,
+                }
+            };
+            println!("Got message: {}", msg);
+            yield Event::json(&msg);
+        }
+    }
+}
+
+#[post("/sse", data="<body>")]
+async fn sse_post(queue: &State<Sender<SSEMessage>>, body: Json<SSEMessage>) {
+    println!("Sent a message: {}", body.message);
+    queue.send(body.into_inner());
+}
+
+
 #[launch]
 fn rocket() -> _ {
     let mut db = get_db();
     let chain = BlockChain::get(&mut db);
     let chain_mutex = Mutex::new(chain);
+    let queue = channel::<SSEMessage>(1024).0;
     rocket::build()
         .mount(
             "/",
@@ -190,8 +224,11 @@ fn rocket() -> _ {
                 get_balance,
                 mempool,
                 make_transaction,
-                my_wallet
+                my_wallet,
+                sse_get,
+                sse_post
             ],
         )
         .manage(chain_mutex)
+        .manage(queue)
 }
