@@ -48,3 +48,11 @@ POST http://localhost:8000/sse
 {
     "message": "Hello, world!"
 }
+
+
+### Add a peer
+POST http://localhost:8000/peers
+        
+{
+    "address": "http://localhost:8001"
+}

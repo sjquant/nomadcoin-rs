@@ -1,14 +1,16 @@
 #[macro_use]
 extern crate rocket;
+use futures::lock::Mutex as FutureMutex;
+use nomadcoin::p2p::{Peer, Peers};
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::http::Status;
+use rocket::response::stream::{Event, EventStream};
 use rocket::serde::{json::Json, Deserialize, Serialize};
-use rocket::State;
-use rocket::response::stream::{EventStream, Event};
-use rocket::tokio::sync::broadcast::{channel, Sender, error::RecvError};
-use std::sync::Mutex;
 use rocket::tokio::select;
+use rocket::tokio::sync::broadcast::{channel, error::RecvError, Sender};
+use rocket::State;
+use std::sync::Mutex;
 
 #[derive(Serialize)]
 struct URLDescription {
@@ -38,6 +40,11 @@ struct MakeTransactionBody {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SSEMessage {
     message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PeerBody {
+    address: String,
 }
 
 fn url(path: &str) -> String {
@@ -179,7 +186,6 @@ fn my_wallet() -> String {
     wallet.address
 }
 
-
 #[get("/sse")]
 async fn sse_get(queue: &State<Sender<SSEMessage>>) -> EventStream![] {
     println!("Connected");
@@ -199,12 +205,19 @@ async fn sse_get(queue: &State<Sender<SSEMessage>>) -> EventStream![] {
     }
 }
 
-#[post("/sse", data="<body>")]
+#[post("/sse", data = "<body>")]
 async fn sse_post(queue: &State<Sender<SSEMessage>>, body: Json<SSEMessage>) {
     println!("Sent a message: {}", body.message);
-    queue.send(body.into_inner());
+    let _ = queue.send(body.into_inner());
 }
 
+#[post("/peers", data = "<body>")]
+async fn add_peer(peers: &State<FutureMutex<Peers>>, body: Json<PeerBody>) {
+    let mut peers = peers.lock().await;
+    let peer = Peer::new(body.address.as_str());
+    println!("Adding peer: {}", peer.address);
+    peers.add(peer).await;
+}
 
 #[launch]
 fn rocket() -> _ {
@@ -212,6 +225,8 @@ fn rocket() -> _ {
     let chain = BlockChain::get(&mut db);
     let chain_mutex = Mutex::new(chain);
     let queue = channel::<SSEMessage>(1024).0;
+    let peers = FutureMutex::new(Peers::new());
+
     rocket::build()
         .mount(
             "/",
@@ -226,9 +241,11 @@ fn rocket() -> _ {
                 make_transaction,
                 my_wallet,
                 sse_get,
-                sse_post
+                sse_post,
+                add_peer
             ],
         )
         .manage(chain_mutex)
         .manage(queue)
+        .manage(peers)
 }
