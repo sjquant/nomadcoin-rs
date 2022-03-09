@@ -10,7 +10,7 @@ use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::tokio::select;
 use rocket::tokio::sync::broadcast::{channel, error::RecvError, Sender};
 use rocket::State;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize)]
 struct URLDescription {
@@ -212,11 +212,14 @@ async fn sse_post(queue: &State<Sender<SSEMessage>>, body: Json<SSEMessage>) {
 }
 
 #[post("/peers", data = "<body>")]
-async fn add_peer(peers: &State<FutureMutex<Peers>>, body: Json<PeerBody>) {
-    let mut peers = peers.lock().await;
-    let peer = Peer::new(body.address.as_str());
-    println!("Adding peer: {}", peer.address);
-    peers.add(peer).await;
+async fn add_peer(peers_state: &State<Arc<FutureMutex<Peers>>>, body: Json<PeerBody>) {
+    let cloned_peers = peers_state.inner().clone();
+    tokio::spawn(async move {
+        let peer = Peer::new(body.address.as_str());
+        println!("Adding peer: {}", peer.address);
+        let mut peers = cloned_peers.lock().await;
+        peers.add(peer).await;
+    });
 }
 
 #[launch]
@@ -225,7 +228,7 @@ fn rocket() -> _ {
     let chain = BlockChain::get(&mut db);
     let chain_mutex = Mutex::new(chain);
     let queue = channel::<SSEMessage>(1024).0;
-    let peers = FutureMutex::new(Peers::new());
+    let peers = Arc::new(FutureMutex::new(Peers::new()));
 
     rocket::build()
         .mount(
