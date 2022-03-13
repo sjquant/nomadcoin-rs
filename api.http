@@ -50,11 +50,11 @@ POST http://localhost:8000/sse
 }
 
 ### See peers
-GET http://localhost:8000/peers
+GET http://localhost:8001/peers
         
 ### Add a peer
 POST http://localhost:8000/peers
         
 {
-    "address": "http://localhost:8001"
+    "address": "127.0.0.1:8001"
 }

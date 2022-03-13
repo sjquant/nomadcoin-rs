@@ -14,10 +14,16 @@ impl Peers {
         }
     }
 
-    pub async fn add(&mut self, peer: Peer) {
+    pub async fn add(&mut self, peer: Peer, openport: u16) {
+        if self.peers.contains_key(&peer.address) {
+            return;
+        }
         self.peers.insert(peer.address.clone(), peer.clone());
         tokio::spawn(async move {
-            let mut es = EventSource::get(format!("{}/sse", &peer.address));
+            let mut es = EventSource::get(format!(
+                "http://{}/sse?openport={}",
+                &peer.address, openport
+            ));
             while let Some(event) = es.next().await {
                 match event {
                     Ok(Event::Open) => println!("Connection Open!"),

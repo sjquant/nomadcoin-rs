@@ -10,6 +10,7 @@ use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::tokio::select;
 use rocket::tokio::sync::broadcast::{channel, error::RecvError, Sender};
 use rocket::State;
+use std::net::IpAddr;
 use std::sync::Mutex;
 
 #[derive(Serialize)]
@@ -191,10 +192,24 @@ fn my_wallet() -> String {
     wallet.address
 }
 
-#[get("/sse")]
-async fn sse_get(queue: &State<Sender<SSEMessage>>) -> EventStream![] {
-    println!("Connected");
+#[get("/sse?<openport>")]
+async fn sse_get(
+    peers_state: &State<FutureMutex<Peers>>,
+    queue: &State<Sender<SSEMessage>>,
+    client_addr: IpAddr,
+    rocket_config: &rocket::Config,
+    openport: Option<String>,
+) -> EventStream![] {
     let mut rx = queue.subscribe();
+
+    if let Some(openport) = openport {
+        let addr = format!("{}:{}", client_addr, openport);
+        let peer = Peer::new(addr.as_str());
+        let mut peers = peers_state.lock().await;
+        peers.add(peer, rocket_config.port).await;
+    }
+
+    // TOOD: remove a peer if connection closed
     EventStream! {
         loop {
             let msg = select! {
@@ -223,11 +238,15 @@ async fn peers(peers_state: &State<FutureMutex<Peers>>) -> Json<Vec<String>> {
 }
 
 #[post("/peers", data = "<body>")]
-async fn add_peer(peers_state: &State<FutureMutex<Peers>>, body: Json<Peer>) {
+async fn add_peer(
+    peers_state: &State<FutureMutex<Peers>>,
+    rocket_config: &rocket::Config,
+    body: Json<Peer>,
+) {
     let peer = Peer::new(body.address.as_str());
     println!("Adding peer: {}", peer.address);
     let mut peers = peers_state.lock().await;
-    peers.add(peer).await;
+    peers.add(peer, rocket_config.port).await;
 }
 
 #[launch]
@@ -237,7 +256,6 @@ fn rocket() -> _ {
     let chain_mutex = Mutex::new(chain);
     let queue = channel::<SSEMessage>(1024).0;
     let peers = FutureMutex::new(Peers::new());
-
     rocket::build()
         .mount(
             "/",
