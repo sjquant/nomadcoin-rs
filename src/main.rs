@@ -10,7 +10,7 @@ use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::tokio::select;
 use rocket::tokio::sync::broadcast::{channel, error::RecvError, Sender};
 use rocket::State;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 #[derive(Serialize)]
 struct URLDescription {
@@ -40,11 +40,6 @@ struct MakeTransactionBody {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SSEMessage {
     message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PeerBody {
-    address: String,
 }
 
 fn url(path: &str) -> String {
@@ -113,6 +108,16 @@ fn documentation() -> Json<Vec<URLDescription>> {
             url: url("/wallet"),
             method: String::from("GET"),
             description: String::from("See my wallet"),
+        },
+        URLDescription {
+            url: url("/peers"),
+            method: String::from("GET"),
+            description: String::from("See peers"),
+        },
+        URLDescription {
+            url: url("/peers"),
+            method: String::from("POST"),
+            description: String::from("Add a peer"),
         },
     ];
     Json(data)
@@ -211,15 +216,18 @@ async fn sse_post(queue: &State<Sender<SSEMessage>>, body: Json<SSEMessage>) {
     let _ = queue.send(body.into_inner());
 }
 
+#[get("/peers")]
+async fn peers(peers_state: &State<FutureMutex<Peers>>) -> Json<Vec<String>> {
+    let peers = peers_state.lock().await;
+    Json(peers.peers.keys().cloned().collect())
+}
+
 #[post("/peers", data = "<body>")]
-async fn add_peer(peers_state: &State<Arc<FutureMutex<Peers>>>, body: Json<PeerBody>) {
-    let cloned_peers = peers_state.inner().clone();
-    tokio::spawn(async move {
-        let peer = Peer::new(body.address.as_str());
-        println!("Adding peer: {}", peer.address);
-        let mut peers = cloned_peers.lock().await;
-        peers.add(peer).await;
-    });
+async fn add_peer(peers_state: &State<FutureMutex<Peers>>, body: Json<Peer>) {
+    let peer = Peer::new(body.address.as_str());
+    println!("Adding peer: {}", peer.address);
+    let mut peers = peers_state.lock().await;
+    peers.add(peer).await;
 }
 
 #[launch]
@@ -228,7 +236,7 @@ fn rocket() -> _ {
     let chain = BlockChain::get(&mut db);
     let chain_mutex = Mutex::new(chain);
     let queue = channel::<SSEMessage>(1024).0;
-    let peers = Arc::new(FutureMutex::new(Peers::new()));
+    let peers = FutureMutex::new(Peers::new());
 
     rocket::build()
         .mount(
@@ -245,6 +253,7 @@ fn rocket() -> _ {
                 my_wallet,
                 sse_get,
                 sse_post,
+                peers,
                 add_peer
             ],
         )
