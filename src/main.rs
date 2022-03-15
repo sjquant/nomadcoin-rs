@@ -9,7 +9,7 @@ use rocket::response::stream::{Event, EventStream};
 use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::tokio::select;
 use rocket::tokio::sync::broadcast::{channel, error::RecvError, Sender};
-use rocket::State;
+use rocket::{routes, State};
 use std::net::IpAddr;
 use std::sync::Mutex;
 
@@ -209,7 +209,6 @@ async fn sse_get(
         peers.add(peer, rocket_config.port).await;
     }
 
-    // TOOD: remove a peer if connection closed
     EventStream! {
         loop {
             let msg = select! {
