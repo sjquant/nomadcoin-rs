@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate rocket;
 use futures::lock::Mutex as FutureMutex;
-use nomadcoin::p2p::{Peer, Peers};
+use nomadcoin::p2p::{add_peer_to_peers, Peer, Peers};
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::http::Status;
@@ -9,9 +9,9 @@ use rocket::response::stream::{Event, EventStream};
 use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::tokio::select;
 use rocket::tokio::sync::broadcast::{channel, error::RecvError, Sender};
-use rocket::{routes, State};
+use rocket::{routes, Shutdown, State};
 use std::net::IpAddr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize)]
 struct URLDescription {
@@ -194,19 +194,19 @@ fn my_wallet() -> String {
 
 #[get("/sse?<openport>")]
 async fn sse_get(
-    peers_state: &State<FutureMutex<Peers>>,
+    peers_state: &State<Arc<FutureMutex<Peers>>>,
     queue: &State<Sender<SSEMessage>>,
+    shutdown: Shutdown,
     client_addr: IpAddr,
     rocket_config: &rocket::Config,
-    openport: Option<String>,
+    openport: Option<u16>,
 ) -> EventStream![] {
     let mut rx = queue.subscribe();
 
     if let Some(openport) = openport {
         let addr = format!("{}:{}", client_addr, openport);
         let peer = Peer::new(addr.as_str());
-        let mut peers = peers_state.lock().await;
-        peers.add(peer, rocket_config.port).await;
+        add_peer_to_peers(peers_state.inner().clone(), &peer, rocket_config.port).await;
     }
 
     EventStream! {
@@ -216,6 +216,10 @@ async fn sse_get(
                     Ok(data) => data.message,
                     Err(RecvError::Closed) => break,
                     Err(RecvError::Lagged(_)) => continue,
+                },
+                _ = shutdown.clone() => {
+                    println!("shutdown");
+                    break;
                 }
             };
             println!("Got message: {}", msg);
@@ -231,21 +235,20 @@ async fn sse_post(queue: &State<Sender<SSEMessage>>, body: Json<SSEMessage>) {
 }
 
 #[get("/peers")]
-async fn peers(peers_state: &State<FutureMutex<Peers>>) -> Json<Vec<String>> {
+async fn peers(peers_state: &State<Arc<FutureMutex<Peers>>>) -> Json<Vec<String>> {
     let peers = peers_state.lock().await;
-    Json(peers.peers.keys().cloned().collect())
+    Json(peers.addresses())
 }
 
 #[post("/peers", data = "<body>")]
 async fn add_peer(
-    peers_state: &State<FutureMutex<Peers>>,
+    peers_state: &State<Arc<FutureMutex<Peers>>>,
     rocket_config: &rocket::Config,
     body: Json<Peer>,
 ) {
     let peer = Peer::new(body.address.as_str());
     println!("Adding peer: {}", peer.address);
-    let mut peers = peers_state.lock().await;
-    peers.add(peer, rocket_config.port).await;
+    add_peer_to_peers(peers_state.inner().clone(), &peer, rocket_config.port).await;
 }
 
 #[launch]
@@ -254,7 +257,7 @@ fn rocket() -> _ {
     let chain = BlockChain::get(&mut db);
     let chain_mutex = Mutex::new(chain);
     let queue = channel::<SSEMessage>(1024).0;
-    let peers = FutureMutex::new(Peers::new());
+    let peers = Arc::new(FutureMutex::new(Peers::new()));
     rocket::build()
         .mount(
             "/",
