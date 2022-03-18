@@ -18,6 +18,7 @@ chrono = "0.4.19"
 p256 = "0.10.1"
 rand_core = "0.6.3"
 hex = "0.4.3"
+reqwest = { version = "0.11", features = ["json"] }
 reqwest-eventsource = "0.4.0"
 futures = "0.3.5"
 tokio = { version = "1.17.0", features = ["full"] }

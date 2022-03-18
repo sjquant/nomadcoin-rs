@@ -1,8 +1,12 @@
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::StreamExt;
+use pickledb::PickleDb;
 use reqwest_eventsource::{Event, EventSource};
+use rocket::serde::json::serde_json;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
+
+use crate::BlockChain;
 
 pub struct Peers {
     map: HashMap<String, Peer>,
@@ -67,4 +71,35 @@ pub async fn add_peer_to_peers(peers: Arc<FutureMutex<Peers>>, peer: &Peer, open
         let mut peers = peers.lock().await;
         peers.remove(&address);
     });
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum P2PEvent {
+    NewestBlockReceived,
+    AllBlocksRequested,
+    ALlBlocksRecevied,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct P2PMessage {
+    pub event: P2PEvent,
+    pub payload: Option<String>,
+}
+
+async fn send_message(peer: &Peer, payload: P2PMessage) {
+    reqwest::Client::new()
+        .post(format!("http://{}/sse", &peer.address))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+}
+
+pub async fn send_newest_block(chain: &BlockChain, db: &mut PickleDb, peer: &Peer) {
+    let newest_block = chain.get_block(db, chain.newest_hash.clone());
+    let payload = P2PMessage {
+        event: P2PEvent::NewestBlockReceived,
+        payload: newest_block.map_or(None, |block| Some(serde_json::to_string(&block).unwrap())),
+    };
+    send_message(peer, payload).await;
 }

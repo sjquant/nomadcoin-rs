@@ -46,7 +46,8 @@ GET http://localhost:8000/sse
 POST http://localhost:8000/sse
     
 {
-    "message": "Hello, world!"
+    "event": "NewestBlockReceived",
+    "payload": "Hello, world!"
 }
 
 ### See peers
