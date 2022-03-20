@@ -105,18 +105,10 @@ async fn send_message(address: &str, msg: P2PMessage) {
         .unwrap();
 }
 
-async fn send_newest_block(address: &str, newest_block: Option<Block>) {
-    let payload = P2PMessage {
-        event: P2PEvent::NewestBlockReceived,
-        payload: newest_block.map_or(None, |block| Some(serde_json::to_string(&block).unwrap())),
-    };
-    send_message(address, payload).await;
-}
-
-pub async fn handle_message(msg: &P2PMessage) {
+pub async fn handle_message(chain: &BlockChain, db: &mut PickleDb, peer: &Peer, msg: &P2PMessage) {
     match msg.event {
         P2PEvent::NewestBlockReceived => {
-            println!("Newest block received");
+            on_newest_block_received(msg, chain, db, peer).await;
         }
         P2PEvent::AllBlocksRequested => {
             println!("All blocks requested");
@@ -125,4 +117,42 @@ pub async fn handle_message(msg: &P2PMessage) {
             println!("All blocks received");
         }
     }
+}
+
+async fn on_newest_block_received(
+    msg: &P2PMessage,
+    chain: &BlockChain,
+    db: &mut PickleDb,
+    peer: &Peer,
+) {
+    let peer_newest_block = msg.payload.as_ref().map_or(None, |payload| {
+        Some(serde_json::from_str::<Block>(payload).unwrap())
+    });
+    let own_newest_block = chain.get_block(db, chain.newest_hash.clone());
+    if let Some(peer_newest_block) = peer_newest_block {
+        if own_newest_block.is_none()
+            || own_newest_block.is_some()
+                && peer_newest_block.height >= own_newest_block.as_ref().unwrap().height
+        {
+            request_all_blocks(&peer.address).await;
+        } else {
+            send_newest_block(&peer.address, own_newest_block).await;
+        }
+    }
+}
+
+async fn request_all_blocks(address: &str) {
+    let payload = P2PMessage {
+        event: P2PEvent::AllBlocksRequested,
+        payload: None,
+    };
+    send_message(address, payload).await;
+}
+
+async fn send_newest_block(address: &str, newest_block: Option<Block>) {
+    let payload = P2PMessage {
+        event: P2PEvent::NewestBlockReceived,
+        payload: newest_block.map_or(None, |block| Some(serde_json::to_string(&block).unwrap())),
+    };
+    send_message(address, payload).await;
 }

@@ -120,7 +120,7 @@ async fn documentation() -> Json<Vec<URLDescription>> {
 }
 
 #[get("/blocks")]
-async fn fetch_blocks(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Block>> {
+async fn fetch_blocks(chain_state: &State<Arc<Mutex<BlockChain>>>) -> Json<Vec<Block>> {
     let chain = chain_state.lock().await;
     let mut db = get_db();
     let blocks = chain.all_blocks(&mut db);
@@ -128,7 +128,10 @@ async fn fetch_blocks(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Block>
 }
 
 #[post("/blocks", data = "<body>")]
-async fn add_block(body: Json<MineBlockBody>, chain_state: &State<Mutex<BlockChain>>) -> Status {
+async fn add_block(
+    body: Json<MineBlockBody>,
+    chain_state: &State<Arc<Mutex<BlockChain>>>,
+) -> Status {
     let mut chain = chain_state.lock().await;
     let mut db = get_db();
     chain.add_block(&mut db, body.address.as_str());
@@ -136,7 +139,10 @@ async fn add_block(body: Json<MineBlockBody>, chain_state: &State<Mutex<BlockCha
 }
 
 #[get("/blocks/<hash>")]
-async fn get_block(chain_state: &State<Mutex<BlockChain>>, hash: String) -> Option<Json<Block>> {
+async fn get_block(
+    chain_state: &State<Arc<Mutex<BlockChain>>>,
+    hash: String,
+) -> Option<Json<Block>> {
     let chain = chain_state.lock().await;
     let mut db = get_db();
     match chain.get_block(&mut db, hash) {
@@ -147,7 +153,7 @@ async fn get_block(chain_state: &State<Mutex<BlockChain>>, hash: String) -> Opti
 
 #[get("/addresses/<address>/txnouts")]
 async fn fetch_txnouts(
-    chain_state: &State<Mutex<BlockChain>>,
+    chain_state: &State<Arc<Mutex<BlockChain>>>,
     address: String,
 ) -> Json<Vec<UTxnOut>> {
     let chain = chain_state.lock().await;
@@ -158,7 +164,7 @@ async fn fetch_txnouts(
 
 #[get("/addresses/<address>/balance")]
 async fn get_balance(
-    chain_state: &State<Mutex<BlockChain>>,
+    chain_state: &State<Arc<Mutex<BlockChain>>>,
     address: String,
 ) -> Json<BalanceRespone> {
     let chain = chain_state.lock().await;
@@ -168,7 +174,7 @@ async fn get_balance(
 }
 
 #[get("/mempool")]
-async fn mempool(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Transaction>> {
+async fn mempool(chain_state: &State<Arc<Mutex<BlockChain>>>) -> Json<Vec<Transaction>> {
     let chain = chain_state.lock().await;
     let mempool = chain.mempool.clone();
     Json(mempool)
@@ -177,7 +183,7 @@ async fn mempool(chain_state: &State<Mutex<BlockChain>>) -> Json<Vec<Transaction
 #[post("/transactions", data = "<body>")]
 async fn make_transaction(
     body: Json<MakeTransactionBody>,
-    chain_state: &State<Mutex<BlockChain>>,
+    chain_state: &State<Arc<Mutex<BlockChain>>>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
     let mut db = get_db();
@@ -195,21 +201,21 @@ async fn my_wallet() -> String {
 
 #[get("/sse?<openport>")]
 async fn sse_get(
-    chain_state: &State<Mutex<BlockChain>>,
+    chain_state: &State<Arc<Mutex<BlockChain>>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
     queue: &State<Sender<P2PMessage>>,
     shutdown: Shutdown,
     client_addr: IpAddr,
     rocket_config: &rocket::Config,
-    openport: Option<u16>,
+    openport: u16,
 ) -> EventStream![] {
-    let chain = chain_state.lock().await;
     let mut db = get_db();
+    let addr = format!("{}:{}", client_addr, openport);
+    let peer = Peer::new(addr.as_str());
     let mut rx = queue.subscribe();
 
-    if let Some(openport) = openport {
-        let addr = format!("{}:{}", client_addr, openport);
-        let peer = Peer::new(addr.as_str());
+    {
+        let chain = chain_state.lock().await;
         add_peer_to_peers(
             &chain,
             &mut db,
@@ -220,6 +226,7 @@ async fn sse_get(
         .await;
     }
 
+    let cloned_chain = chain_state.inner().clone();
     EventStream! {
         loop {
             let msg = select! {
@@ -233,7 +240,8 @@ async fn sse_get(
                     break;
                 }
             };
-            handle_message(&msg).await;
+            let chain = cloned_chain.lock().await;
+            handle_message(&chain, &mut db, &peer, &msg).await;
             yield Event::json(&msg.event);
         }
     }
@@ -254,7 +262,7 @@ async fn peers(peers_state: &State<Arc<Mutex<Peers>>>) -> Json<Vec<String>> {
 
 #[post("/peers", data = "<body>")]
 async fn add_peer(
-    chain_state: &State<Mutex<BlockChain>>,
+    chain_state: &State<Arc<Mutex<BlockChain>>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
     rocket_config: &rocket::Config,
     body: Json<Peer>,
@@ -276,8 +284,7 @@ async fn add_peer(
 #[launch]
 fn rocket() -> _ {
     let mut db = get_db();
-    let chain = BlockChain::get(&mut db);
-    let chain_mutex = Mutex::new(chain);
+    let chain = Arc::new(Mutex::new(BlockChain::get(&mut db)));
     let queue = channel::<P2PMessage>(1024).0;
     let peers = Arc::new(Mutex::new(Peers::new()));
     rocket::build()
@@ -299,7 +306,7 @@ fn rocket() -> _ {
                 add_peer
             ],
         )
-        .manage(chain_mutex)
+        .manage(chain)
         .manage(queue)
         .manage(peers)
 }
