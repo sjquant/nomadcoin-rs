@@ -6,7 +6,7 @@ use rocket::serde::json::serde_json;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
-use crate::BlockChain;
+use crate::{Block, BlockChain};
 
 pub struct Peers {
     map: HashMap<String, Peer>,
@@ -45,7 +45,13 @@ impl Peer {
     }
 }
 
-pub async fn add_peer_to_peers(peers: Arc<FutureMutex<Peers>>, peer: &Peer, openport: u16) {
+pub async fn add_peer_to_peers(
+    chain: &BlockChain,
+    db: &mut PickleDb,
+    peers: Arc<FutureMutex<Peers>>,
+    peer: &Peer,
+    openport: u16,
+) {
     {
         let mut peers = peers.lock().await;
         if peers.contains(&peer.address) {
@@ -55,12 +61,16 @@ pub async fn add_peer_to_peers(peers: Arc<FutureMutex<Peers>>, peer: &Peer, open
     }
 
     let address = peer.address.clone();
+    let newest_block = chain.get_block(db, chain.newest_hash.clone());
 
     tokio::spawn(async move {
         let mut es = EventSource::get(format!("http://{}/sse?openport={}", &address, openport));
         while let Some(event) = es.next().await {
             match event {
-                Ok(Event::Open) => println!("Connection Open!"),
+                Ok(Event::Open) => {
+                    println!("Connection Open!");
+                    send_newest_block(&address, newest_block.clone()).await;
+                }
                 Ok(Event::Message(message)) => println!("Message: {:#?}", message),
                 Err(err) => {
                     println!("Error: {}", err);
@@ -86,20 +96,33 @@ pub struct P2PMessage {
     pub payload: Option<String>,
 }
 
-async fn send_message(peer: &Peer, payload: P2PMessage) {
+async fn send_message(address: &str, msg: P2PMessage) {
     reqwest::Client::new()
-        .post(format!("http://{}/sse", &peer.address))
-        .json(&payload)
+        .post(format!("http://{}/sse", address))
+        .json(&msg)
         .send()
         .await
         .unwrap();
 }
 
-pub async fn send_newest_block(chain: &BlockChain, db: &mut PickleDb, peer: &Peer) {
-    let newest_block = chain.get_block(db, chain.newest_hash.clone());
+async fn send_newest_block(address: &str, newest_block: Option<Block>) {
     let payload = P2PMessage {
         event: P2PEvent::NewestBlockReceived,
         payload: newest_block.map_or(None, |block| Some(serde_json::to_string(&block).unwrap())),
     };
-    send_message(peer, payload).await;
+    send_message(address, payload).await;
+}
+
+pub async fn handle_message(msg: &P2PMessage) {
+    match msg.event {
+        P2PEvent::NewestBlockReceived => {
+            println!("Newest block received");
+        }
+        P2PEvent::AllBlocksRequested => {
+            println!("All blocks requested");
+        }
+        P2PEvent::ALlBlocksRecevied => {
+            println!("All blocks received");
+        }
+    }
 }

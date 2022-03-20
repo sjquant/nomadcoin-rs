@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate rocket;
 use futures::lock::Mutex;
-use nomadcoin::p2p::{add_peer_to_peers, send_newest_block, P2PMessage, Peer, Peers};
+use nomadcoin::p2p::{add_peer_to_peers, handle_message, P2PMessage, Peer, Peers};
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::http::Status;
@@ -195,6 +195,7 @@ async fn my_wallet() -> String {
 
 #[get("/sse?<openport>")]
 async fn sse_get(
+    chain_state: &State<Mutex<BlockChain>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
     queue: &State<Sender<P2PMessage>>,
     shutdown: Shutdown,
@@ -202,12 +203,21 @@ async fn sse_get(
     rocket_config: &rocket::Config,
     openport: Option<u16>,
 ) -> EventStream![] {
+    let chain = chain_state.lock().await;
+    let mut db = get_db();
     let mut rx = queue.subscribe();
 
     if let Some(openport) = openport {
         let addr = format!("{}:{}", client_addr, openport);
         let peer = Peer::new(addr.as_str());
-        add_peer_to_peers(peers_state.inner().clone(), &peer, rocket_config.port).await;
+        add_peer_to_peers(
+            &chain,
+            &mut db,
+            peers_state.inner().clone(),
+            &peer,
+            rocket_config.port,
+        )
+        .await;
     }
 
     EventStream! {
@@ -223,7 +233,7 @@ async fn sse_get(
                     break;
                 }
             };
-            println!("Got event: {:?}, payload: {:?}", &msg.event, &msg.payload);
+            handle_message(&msg).await;
             yield Event::json(&msg.event);
         }
     }
@@ -253,8 +263,14 @@ async fn add_peer(
     let mut db = get_db();
     let peer = Peer::new(body.address.as_str());
     println!("Adding peer: {}", peer.address);
-    add_peer_to_peers(peers_state.inner().clone(), &peer, rocket_config.port).await;
-    send_newest_block(&chain, &mut db, &peer).await;
+    add_peer_to_peers(
+        &chain,
+        &mut db,
+        peers_state.inner().clone(),
+        &peer,
+        rocket_config.port,
+    )
+    .await;
 }
 
 #[launch]
