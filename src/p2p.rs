@@ -87,7 +87,7 @@ pub async fn add_peer_to_peers(
 pub enum P2PEvent {
     NewestBlockReceived,
     AllBlocksRequested,
-    ALlBlocksRecevied,
+    AllBlocksRecevied,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,12 +111,17 @@ pub async fn handle_message(chain: &BlockChain, db: &mut PickleDb, peer: &Peer, 
             on_newest_block_received(msg, chain, db, peer).await;
         }
         P2PEvent::AllBlocksRequested => {
-            println!("All blocks requested");
+            on_all_blocks_requested(chain, db, peer).await;
         }
-        P2PEvent::ALlBlocksRecevied => {
+        P2PEvent::AllBlocksRecevied => {
             println!("All blocks received");
         }
     }
+}
+
+async fn on_all_blocks_requested(chain: &BlockChain, db: &mut PickleDb, peer: &Peer) {
+    let blocks = chain.all_blocks(db);
+    send_all_blocks(&peer.address, blocks).await;
 }
 
 async fn on_newest_block_received(
@@ -153,6 +158,14 @@ async fn send_newest_block(address: &str, newest_block: Option<Block>) {
     let payload = P2PMessage {
         event: P2PEvent::NewestBlockReceived,
         payload: newest_block.map_or(None, |block| Some(serde_json::to_string(&block).unwrap())),
+    };
+    send_message(address, payload).await;
+}
+
+async fn send_all_blocks(address: &str, all_blocks: Vec<Block>) {
+    let payload = P2PMessage {
+        event: P2PEvent::AllBlocksRecevied,
+        payload: Some(serde_json::to_string(&all_blocks).unwrap()),
     };
     send_message(address, payload).await;
 }

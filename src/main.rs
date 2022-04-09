@@ -43,14 +43,16 @@ fn url(path: &str) -> String {
 }
 
 fn get_db() -> PickleDb {
+    let port = std::env::var("ROCKET_PORT").unwrap();
+    let db_path = format!("blockchain_{}.db", port);
     match PickleDb::load(
-        "blockchain.db",
+        db_path.as_str(),
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Json,
     ) {
         Ok(load) => load,
         Err(_) => PickleDb::new(
-            "blockchain.db",
+            db_path.as_str(),
             PickleDbDumpPolicy::AutoDump,
             SerializationMethod::Json,
         ),
@@ -250,7 +252,7 @@ async fn sse_get(
 #[post("/sse", data = "<body>")]
 async fn sse_post(queue: &State<Sender<P2PMessage>>, body: Json<P2PMessage>) {
     let msg = body.into_inner();
-    println!("Sent a message: {:?}", msg);
+    println!("Received a message: {:?}", msg);
     let _ = queue.send(msg);
 }
 
