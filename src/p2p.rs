@@ -71,11 +71,11 @@ pub async fn add_peer_to_peers(
                     println!("Connection Open!");
                     send_newest_block(&address, newest_block.clone()).await;
                 }
-                Ok(Event::Message(message)) => println!("Message: {:#?}", message),
                 Err(err) => {
                     println!("Error: {}", err);
                     es.close();
                 }
+                _ => {}
             }
         }
         let mut peers = peers.lock().await;
@@ -105,7 +105,12 @@ async fn send_message(address: &str, msg: P2PMessage) {
         .unwrap();
 }
 
-pub async fn handle_message(chain: &BlockChain, db: &mut PickleDb, peer: &Peer, msg: &P2PMessage) {
+pub async fn handle_message(
+    chain: &mut BlockChain,
+    db: &mut PickleDb,
+    peer: &Peer,
+    msg: &P2PMessage,
+) {
     match msg.event {
         P2PEvent::NewestBlockReceived => {
             on_newest_block_received(msg, chain, db, peer).await;
@@ -114,14 +119,9 @@ pub async fn handle_message(chain: &BlockChain, db: &mut PickleDb, peer: &Peer, 
             on_all_blocks_requested(chain, db, peer).await;
         }
         P2PEvent::AllBlocksRecevied => {
-            println!("All blocks received");
+            on_all_blocks_received(msg, chain, db, peer).await;
         }
     }
-}
-
-async fn on_all_blocks_requested(chain: &BlockChain, db: &mut PickleDb, peer: &Peer) {
-    let blocks = chain.all_blocks(db);
-    send_all_blocks(&peer.address, blocks).await;
 }
 
 async fn on_newest_block_received(
@@ -130,6 +130,7 @@ async fn on_newest_block_received(
     db: &mut PickleDb,
     peer: &Peer,
 ) {
+    println!("Got newest block from {}", peer.address);
     let peer_newest_block = msg.payload.as_ref().map_or(None, |payload| {
         Some(serde_json::from_str::<Block>(payload).unwrap())
     });
@@ -162,10 +163,33 @@ async fn send_newest_block(address: &str, newest_block: Option<Block>) {
     send_message(address, payload).await;
 }
 
+async fn on_all_blocks_requested(chain: &BlockChain, db: &mut PickleDb, peer: &Peer) {
+    println!("All blocks requested from {}", peer.address);
+    let blocks = chain.all_blocks(db);
+    send_all_blocks(&peer.address, blocks).await;
+}
+
 async fn send_all_blocks(address: &str, all_blocks: Vec<Block>) {
     let payload = P2PMessage {
         event: P2PEvent::AllBlocksRecevied,
         payload: Some(serde_json::to_string(&all_blocks).unwrap()),
     };
     send_message(address, payload).await;
+}
+
+async fn on_all_blocks_received(
+    msg: &P2PMessage,
+    chain: &mut BlockChain,
+    db: &mut PickleDb,
+    peer: &Peer,
+) {
+    println!("Got all blocks from {}", peer.address);
+    let blocks: Option<Vec<Block>> = msg
+        .payload
+        .as_ref()
+        .map(|payload| serde_json::from_str(payload).unwrap());
+
+    if let Some(blocks) = blocks {
+        chain.replace(db, blocks);
+    }
 }

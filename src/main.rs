@@ -242,8 +242,8 @@ async fn sse_get(
                     break;
                 }
             };
-            let chain = cloned_chain.lock().await;
-            handle_message(&chain, &mut db, &peer, &msg).await;
+            let mut chain = cloned_chain.lock().await;
+            handle_message(&mut chain, &mut db, &peer, &msg).await;
             yield Event::json(&msg.event);
         }
     }
@@ -252,7 +252,6 @@ async fn sse_get(
 #[post("/sse", data = "<body>")]
 async fn sse_post(queue: &State<Sender<P2PMessage>>, body: Json<P2PMessage>) {
     let msg = body.into_inner();
-    println!("Received a message: {:?}", msg);
     let _ = queue.send(msg);
 }
 

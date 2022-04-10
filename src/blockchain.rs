@@ -59,8 +59,7 @@ impl BlockChain {
             self.calc_difficulty(db),
             &mut self.mempool,
         );
-        db.set(format!("block:{}", block.hash).as_str(), &block)
-            .unwrap();
+        persist_block(db, &block);
         self.newest_hash = block.hash;
         self.height = block.height;
         self.mempool = vec![];
@@ -223,6 +222,28 @@ impl BlockChain {
             Ok(())
         }
     }
+
+    pub fn replace(&mut self, db: &mut PickleDb, new_blocks: Vec<Block>) {
+        self.difficulty = new_blocks[0].difficulty;
+        self.height = new_blocks[0].height;
+        self.newest_hash = new_blocks[0].hash.clone();
+        self.create_checkpoint(db);
+        empty_db(db);
+        for block in new_blocks.iter() {
+            persist_block(db, block);
+        }
+    }
+}
+
+fn empty_db(db: &mut PickleDb) {
+    for key in db.get_all().into_iter() {
+        let _ = db.rem(key.as_str());
+    }
+}
+
+fn persist_block(db: &mut PickleDb, block: &Block) {
+    db.set(format!("block:{}", block.hash).as_str(), block)
+        .unwrap();
 }
 
 #[cfg(test)]
