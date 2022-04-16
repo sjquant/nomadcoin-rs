@@ -1,7 +1,9 @@
 #[macro_use]
 extern crate rocket;
 use futures::lock::Mutex;
-use nomadcoin::p2p::{add_peer_to_peers, handle_message, P2PMessage, Peer, Peers};
+use nomadcoin::p2p::{
+    add_peer_to_peers, broadcast_new_block, handle_message, P2PMessage, Peer, Peers,
+};
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::http::Status;
@@ -133,10 +135,12 @@ async fn fetch_blocks(chain_state: &State<Arc<Mutex<BlockChain>>>) -> Json<Vec<B
 async fn add_block(
     body: Json<MineBlockBody>,
     chain_state: &State<Arc<Mutex<BlockChain>>>,
+    peers_state: &State<Arc<Mutex<Peers>>>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
     let mut db = get_db();
-    chain.add_block(&mut db, body.address.as_str());
+    let block = chain.mine_block(&mut db, body.address.as_str());
+    broadcast_new_block(peers_state.inner().clone(), block).await;
     Status::Created
 }
 
@@ -211,12 +215,12 @@ async fn sse_get(
     rocket_config: &rocket::Config,
     openport: u16,
 ) -> EventStream![] {
-    let mut db = get_db();
     let addr = format!("{}:{}", client_addr, openport);
     let peer = Peer::new(addr.as_str());
     let mut rx = queue.subscribe();
 
     {
+        let mut db = get_db();
         let chain = chain_state.lock().await;
         add_peer_to_peers(
             &chain,
@@ -243,6 +247,7 @@ async fn sse_get(
                 }
             };
             let mut chain = cloned_chain.lock().await;
+            let mut db = get_db();
             handle_message(&mut chain, &mut db, &peer, &msg).await;
             yield Event::json(&msg.event);
         }

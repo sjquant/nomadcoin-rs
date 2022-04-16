@@ -51,7 +51,7 @@ impl BlockChain {
         }
     }
 
-    pub fn add_block(&mut self, db: &mut PickleDb, address: &str) {
+    pub fn mine_block(&mut self, db: &mut PickleDb, address: &str) -> Block {
         let block = Block::mine(
             address,
             self.newest_hash.clone(),
@@ -59,10 +59,19 @@ impl BlockChain {
             self.calc_difficulty(db),
             &mut self.mempool,
         );
-        persist_block(db, &block);
-        self.newest_hash = block.hash;
-        self.height = block.height;
+        self.newest_hash = block.hash.clone();
+        self.height = *&block.height;
         self.mempool = vec![];
+        persist_block(db, &block);
+        self.create_checkpoint(db);
+        block
+    }
+
+    pub fn add_block(&mut self, db: &mut PickleDb, block: Block) {
+        self.newest_hash = block.hash.clone();
+        self.height = *&block.height;
+        self.difficulty = *&block.difficulty;
+        persist_block(db, &block);
         self.create_checkpoint(db);
     }
 
@@ -267,8 +276,8 @@ mod tests {
 
         {
             let mut chain = BlockChain::get(&mut db);
-            chain.add_block(&mut db, "some-address");
-            chain.add_block(&mut db, "some-address");
+            chain.mine_block(&mut db, "some-address");
+            chain.mine_block(&mut db, "some-address");
         }
 
         // When
@@ -279,14 +288,14 @@ mod tests {
     }
 
     #[test]
-    fn add_block() {
+    fn mine_block() {
         // Given
         let (_r, mut db) = test_utils::test_db();
 
         // When
         let mut chain = BlockChain::get(&mut db);
-        chain.add_block(&mut db, "some-address");
-        chain.add_block(&mut db, "some-address");
+        chain.mine_block(&mut db, "some-address");
+        chain.mine_block(&mut db, "some-address");
 
         // Then
         let blocks = chain.all_blocks(&mut db);
@@ -300,7 +309,7 @@ mod tests {
         let mut chain = BlockChain::get(&mut db);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
-        chain.add_block(&mut db, address); // Earn 50 by mining block
+        chain.mine_block(&mut db, address); // Earn 50 by mining block
 
         // When
         chain
@@ -318,19 +327,19 @@ mod tests {
     }
 
     #[test]
-    fn add_block_confirms_transaction() {
+    fn mine_block_confirms_transaction() {
         // Given
         let (_r, mut db) = test_utils::test_db();
         let mut chain = BlockChain::get(&mut db);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
-        chain.add_block(&mut db, address); // Earn 50 by mining block
+        chain.mine_block(&mut db, address); // Earn 50 by mining block
         chain
             .make_transaction(&mut db, address, "john", 20)
             .unwrap();
 
         // When
-        chain.add_block(&mut db, address); // Earn another 50 by mining block
+        chain.mine_block(&mut db, address); // Earn another 50 by mining block
 
         // Then
         assert_eq!(chain.balance_by_address(&mut db, address), 80);
@@ -347,7 +356,7 @@ mod tests {
         let address = wallet.address.as_str();
 
         // Earn 50 by mining block
-        chain.add_block(&mut db, address);
+        chain.mine_block(&mut db, address);
 
         // When
         let err = chain

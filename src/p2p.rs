@@ -88,6 +88,7 @@ pub enum P2PEvent {
     NewestBlockReceived,
     AllBlocksRequested,
     AllBlocksRecevied,
+    NewBlockNotified,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +121,9 @@ pub async fn handle_message(
         }
         P2PEvent::AllBlocksRecevied => {
             on_all_blocks_received(msg, chain, db, peer).await;
+        }
+        P2PEvent::NewBlockNotified => {
+            on_new_block_notified(msg, chain, db, peer).await;
         }
     }
 }
@@ -191,5 +195,33 @@ async fn on_all_blocks_received(
 
     if let Some(blocks) = blocks {
         chain.replace(db, blocks);
+    }
+}
+
+pub async fn broadcast_new_block(peers: Arc<FutureMutex<Peers>>, block: Block) {
+    let peers = peers.lock().await;
+    for peer in peers.map.keys() {
+        let msg = P2PMessage {
+            event: P2PEvent::NewBlockNotified,
+            payload: Some(serde_json::to_string(&block).unwrap()),
+        };
+        send_message(peer, msg).await;
+    }
+}
+
+async fn on_new_block_notified(
+    msg: &P2PMessage,
+    chain: &mut BlockChain,
+    db: &mut PickleDb,
+    peer: &Peer,
+) {
+    println!("Got new block from {}", peer.address);
+    let block: Option<Block> = msg
+        .payload
+        .as_ref()
+        .map(|payload| serde_json::from_str(payload).unwrap());
+
+    if let Some(block) = block {
+        chain.add_block(db, block);
     }
 }
