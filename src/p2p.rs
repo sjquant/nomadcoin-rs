@@ -4,7 +4,7 @@ use pickledb::PickleDb;
 use reqwest_eventsource::{Event, EventSource};
 use rocket::serde::json::serde_json;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, thread, time::Duration};
 
 use crate::{Block, BlockChain};
 
@@ -27,25 +27,28 @@ impl Peers {
     pub fn contains(&self, address: &str) -> bool {
         self.map.contains_key(address)
     }
-    pub fn addresses(&self) -> Vec<String> {
-        self.map.keys().cloned().collect()
+    pub fn all(&self) -> Vec<Peer> {
+        self.map.values().cloned().collect()
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Peer {
+    pub id: String,
     pub address: String,
 }
 
 impl Peer {
-    pub fn new(address: &str) -> Self {
+    pub fn new(id: &str, address: &str) -> Self {
         Peer {
+            id: id.to_string(),
             address: address.to_string(),
         }
     }
 }
 
 pub async fn add_peer_to_peers(
+    app_id: String,
     chain: &BlockChain,
     db: &mut PickleDb,
     peers: Arc<FutureMutex<Peers>>,
@@ -69,7 +72,7 @@ pub async fn add_peer_to_peers(
             match event {
                 Ok(Event::Open) => {
                     println!("Connection Open!");
-                    send_newest_block(&address, newest_block.clone()).await;
+                    send_newest_block(app_id.clone(), &address, newest_block.clone()).await;
                 }
                 Err(err) => {
                     println!("Error: {}", err);
@@ -95,6 +98,7 @@ pub enum P2PEvent {
 pub struct P2PMessage {
     pub event: P2PEvent,
     pub payload: Option<String>,
+    pub sender_id: String,
 }
 
 async fn send_message(address: &str, msg: P2PMessage) {
@@ -107,6 +111,7 @@ async fn send_message(address: &str, msg: P2PMessage) {
 }
 
 pub async fn handle_message(
+    app_id: String,
     chain: &mut BlockChain,
     db: &mut PickleDb,
     peer: &Peer,
@@ -114,10 +119,10 @@ pub async fn handle_message(
 ) {
     match msg.event {
         P2PEvent::NewestBlockReceived => {
-            on_newest_block_received(msg, chain, db, peer).await;
+            on_newest_block_received(app_id, msg, chain, db, peer).await;
         }
         P2PEvent::AllBlocksRequested => {
-            on_all_blocks_requested(chain, db, peer).await;
+            on_all_blocks_requested(app_id, chain, db, peer).await;
         }
         P2PEvent::AllBlocksRecevied => {
             on_all_blocks_received(msg, chain, db, peer).await;
@@ -129,6 +134,7 @@ pub async fn handle_message(
 }
 
 async fn on_newest_block_received(
+    app_id: String,
     msg: &P2PMessage,
     chain: &BlockChain,
     db: &mut PickleDb,
@@ -140,43 +146,58 @@ async fn on_newest_block_received(
     });
     let own_newest_block = chain.get_block(db, chain.newest_hash.clone());
     if let Some(peer_newest_block) = peer_newest_block {
+        // TODO: improve this to send message after all connection is established
+        // Give time for connection to be established
+        // I know it's bad idea, but I'am not sure how to handle it better in SSE instead of websockets
+        thread::sleep(Duration::from_millis(1000));
         if own_newest_block.is_none()
             || own_newest_block.is_some()
                 && peer_newest_block.height >= own_newest_block.as_ref().unwrap().height
         {
-            request_all_blocks(&peer.address).await;
+            request_all_blocks(app_id, &peer.address).await;
         } else {
-            send_newest_block(&peer.address, own_newest_block).await;
+            send_newest_block(app_id, &peer.address, own_newest_block).await;
         }
     }
 }
 
-async fn request_all_blocks(address: &str) {
+async fn request_all_blocks(app_id: String, address: &str) {
+    println!("Requesting all blocks from {}", address);
     let payload = P2PMessage {
         event: P2PEvent::AllBlocksRequested,
         payload: None,
+        sender_id: app_id,
     };
     send_message(address, payload).await;
 }
 
-async fn send_newest_block(address: &str, newest_block: Option<Block>) {
+async fn send_newest_block(app_id: String, address: &str, newest_block: Option<Block>) {
+    println!("Send newest block to {}", address);
     let payload = P2PMessage {
         event: P2PEvent::NewestBlockReceived,
         payload: newest_block.map_or(None, |block| Some(serde_json::to_string(&block).unwrap())),
+        sender_id: app_id,
     };
     send_message(address, payload).await;
 }
 
-async fn on_all_blocks_requested(chain: &BlockChain, db: &mut PickleDb, peer: &Peer) {
+async fn on_all_blocks_requested(
+    app_id: String,
+    chain: &BlockChain,
+    db: &mut PickleDb,
+    peer: &Peer,
+) {
     println!("All blocks requested from {}", peer.address);
     let blocks = chain.all_blocks(db);
-    send_all_blocks(&peer.address, blocks).await;
+    send_all_blocks(app_id, &peer.address, blocks).await;
 }
 
-async fn send_all_blocks(address: &str, all_blocks: Vec<Block>) {
+async fn send_all_blocks(app_id: String, address: &str, all_blocks: Vec<Block>) {
+    println!("Send all blocks to {}", address);
     let payload = P2PMessage {
         event: P2PEvent::AllBlocksRecevied,
         payload: Some(serde_json::to_string(&all_blocks).unwrap()),
+        sender_id: app_id,
     };
     send_message(address, payload).await;
 }
@@ -198,12 +219,14 @@ async fn on_all_blocks_received(
     }
 }
 
-pub async fn broadcast_new_block(peers: Arc<FutureMutex<Peers>>, block: Block) {
+pub async fn broadcast_new_block(app_id: String, peers: Arc<FutureMutex<Peers>>, block: Block) {
+    println!("Broadcast new block");
     let peers = peers.lock().await;
     for peer in peers.map.keys() {
         let msg = P2PMessage {
             event: P2PEvent::NewBlockNotified,
             payload: Some(serde_json::to_string(&block).unwrap()),
+            sender_id: app_id.clone(),
         };
         send_message(peer, msg).await;
     }

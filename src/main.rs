@@ -14,6 +14,7 @@ use rocket::tokio::sync::broadcast::{channel, error::RecvError, Sender};
 use rocket::{routes, Shutdown, State};
 use std::net::IpAddr;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Serialize)]
 struct URLDescription {
@@ -38,6 +39,11 @@ struct MakeTransactionBody {
     from: String,
     to: String,
     amount: u64,
+}
+
+#[derive(Deserialize)]
+struct AddPeerBody {
+    address: String,
 }
 
 fn url(path: &str) -> String {
@@ -119,6 +125,11 @@ async fn documentation() -> Json<Vec<URLDescription>> {
             method: String::from("POST"),
             description: String::from("Add a peer"),
         },
+        URLDescription {
+            url: url("/app-id"),
+            method: String::from("Get"),
+            description: String::from("Get a app id"),
+        },
     ];
     Json(data)
 }
@@ -136,11 +147,17 @@ async fn add_block(
     body: Json<MineBlockBody>,
     chain_state: &State<Arc<Mutex<BlockChain>>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
+    app_id_state: &State<String>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
     let mut db = get_db();
     let block = chain.mine_block(&mut db, body.address.as_str());
-    broadcast_new_block(peers_state.inner().clone(), block).await;
+    broadcast_new_block(
+        app_id_state.inner().clone(),
+        peers_state.inner().clone(),
+        block,
+    )
+    .await;
     Status::Created
 }
 
@@ -213,16 +230,20 @@ async fn sse_get(
     shutdown: Shutdown,
     client_addr: IpAddr,
     rocket_config: &rocket::Config,
+    app_id_state: &State<String>,
     openport: u16,
 ) -> EventStream![] {
-    let addr = format!("{}:{}", client_addr, openport);
-    let peer = Peer::new(addr.as_str());
+    let peer_addr = format!("{}:{}", client_addr, openport);
+    let peer_id = get_peer_id_from_address(peer_addr.as_str()).await;
+    let peer = Peer::new(peer_id.as_str(), peer_addr.as_str());
     let mut rx = queue.subscribe();
+    let app_id = app_id_state.inner().clone();
 
     {
         let mut db = get_db();
         let chain = chain_state.lock().await;
         add_peer_to_peers(
+            app_id.clone(),
             &chain,
             &mut db,
             peers_state.inner().clone(),
@@ -246,9 +267,13 @@ async fn sse_get(
                     break;
                 }
             };
+            let app_id = app_id.clone();
+            if msg.sender_id != peer.id {
+                continue
+            }
             let mut chain = cloned_chain.lock().await;
             let mut db = get_db();
-            handle_message(&mut chain, &mut db, &peer, &msg).await;
+            handle_message(app_id, &mut chain, &mut db, &peer, &msg).await;
             yield Event::json(&msg.event);
         }
     }
@@ -261,23 +286,27 @@ async fn sse_post(queue: &State<Sender<P2PMessage>>, body: Json<P2PMessage>) {
 }
 
 #[get("/peers")]
-async fn peers(peers_state: &State<Arc<Mutex<Peers>>>) -> Json<Vec<String>> {
+async fn peers(peers_state: &State<Arc<Mutex<Peers>>>) -> Json<Vec<Peer>> {
     let peers = peers_state.lock().await;
-    Json(peers.addresses())
+    Json(peers.all())
 }
 
 #[post("/peers", data = "<body>")]
 async fn add_peer(
     chain_state: &State<Arc<Mutex<BlockChain>>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
+    app_id_state: &State<String>,
     rocket_config: &rocket::Config,
-    body: Json<Peer>,
+    body: Json<AddPeerBody>,
 ) {
     let chain = chain_state.lock().await;
     let mut db = get_db();
-    let peer = Peer::new(body.address.as_str());
-    println!("Adding peer: {}", peer.address);
+    let peer_address = body.address.as_str();
+    let peer_id = get_peer_id_from_address(peer_address).await;
+    let peer = Peer::new(peer_id.as_str(), peer_address);
+    println!("Adding peer: {}", peer_address);
     add_peer_to_peers(
+        app_id_state.inner().clone(),
         &chain,
         &mut db,
         peers_state.inner().clone(),
@@ -287,12 +316,28 @@ async fn add_peer(
     .await;
 }
 
+#[get("/app-id")]
+async fn app_id(app_id_state: &State<String>) -> String {
+    app_id_state.inner().clone()
+}
+
+async fn get_peer_id_from_address(address: &str) -> String {
+    reqwest::get(format!("http://{}/app-id", address))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap()
+}
+
 #[launch]
 fn rocket() -> _ {
     let mut db = get_db();
     let chain = Arc::new(Mutex::new(BlockChain::get(&mut db)));
     let queue = channel::<P2PMessage>(1024).0;
     let peers = Arc::new(Mutex::new(Peers::new()));
+    let app_id = Uuid::new_v4().to_string();
+
     rocket::build()
         .mount(
             "/",
@@ -309,10 +354,12 @@ fn rocket() -> _ {
                 sse_get,
                 sse_post,
                 peers,
-                add_peer
+                add_peer,
+                app_id
             ],
         )
         .manage(chain)
         .manage(queue)
         .manage(peers)
+        .manage(app_id)
 }
