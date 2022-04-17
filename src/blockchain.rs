@@ -202,7 +202,7 @@ impl BlockChain {
         from: &str,
         to: &str,
         amount: u64,
-    ) -> Result<(), Error> {
+    ) -> Result<Transaction, Error> {
         if self.balance_by_address(db, from) < amount {
             Err(Error::new("Not enough balance"))
         } else {
@@ -227,8 +227,8 @@ impl BlockChain {
             if !self.validate_transaction(db, &transaction) {
                 return Err(Error::new("Invalid transaction"));
             };
-            self.mempool.push(transaction);
-            Ok(())
+            self.mempool.push(transaction.clone());
+            Ok(transaction)
         }
     }
 

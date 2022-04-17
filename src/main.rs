@@ -2,7 +2,8 @@
 extern crate rocket;
 use futures::lock::Mutex;
 use nomadcoin::p2p::{
-    add_peer_to_peers, broadcast_new_block, handle_message, P2PMessage, Peer, Peers,
+    add_peer_to_peers, broadcast_new_block, broadcast_new_txn, handle_message, P2PMessage, Peer,
+    Peers,
 };
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
@@ -207,11 +208,21 @@ async fn mempool(chain_state: &State<Arc<Mutex<BlockChain>>>) -> Json<Vec<Transa
 async fn make_transaction(
     body: Json<MakeTransactionBody>,
     chain_state: &State<Arc<Mutex<BlockChain>>>,
+    peers_state: &State<Arc<Mutex<Peers>>>,
+    app_id_state: &State<String>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
     let mut db = get_db();
     match chain.make_transaction(&mut db, body.from.as_str(), body.to.as_str(), body.amount) {
-        Ok(()) => Status::Created,
+        Ok(txn) => {
+            broadcast_new_txn(
+                app_id_state.inner().clone(),
+                peers_state.inner().clone(),
+                txn,
+            )
+            .await;
+            Status::Created
+        }
         Err(_) => Status::BadRequest,
     }
 }

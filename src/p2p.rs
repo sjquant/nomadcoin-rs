@@ -6,7 +6,7 @@ use rocket::serde::json::serde_json;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, thread, time::Duration};
 
-use crate::{Block, BlockChain};
+use crate::{Block, BlockChain, Transaction};
 
 pub struct Peers {
     map: HashMap<String, Peer>,
@@ -92,6 +92,7 @@ pub enum P2PEvent {
     AllBlocksRequested,
     AllBlocksRecevied,
     NewBlockNotified,
+    NewTxnNotified,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +109,13 @@ async fn send_message(address: &str, msg: P2PMessage) {
         .send()
         .await
         .unwrap();
+}
+
+async fn broadcast_message(peers: Arc<FutureMutex<Peers>>, msg: P2PMessage) {
+    let peers = peers.lock().await;
+    for peer in peers.map.keys() {
+        send_message(peer, msg.clone()).await;
+    }
 }
 
 pub async fn handle_message(
@@ -129,6 +137,9 @@ pub async fn handle_message(
         }
         P2PEvent::NewBlockNotified => {
             on_new_block_notified(msg, chain, db, peer).await;
+        }
+        P2PEvent::NewTxnNotified => {
+            on_new_txn_notified(msg, chain, peer).await;
         }
     }
 }
@@ -221,15 +232,12 @@ async fn on_all_blocks_received(
 
 pub async fn broadcast_new_block(app_id: String, peers: Arc<FutureMutex<Peers>>, block: Block) {
     println!("Broadcast new block");
-    let peers = peers.lock().await;
-    for peer in peers.map.keys() {
-        let msg = P2PMessage {
-            event: P2PEvent::NewBlockNotified,
-            payload: Some(serde_json::to_string(&block).unwrap()),
-            sender_id: app_id.clone(),
-        };
-        send_message(peer, msg).await;
-    }
+    let msg = P2PMessage {
+        event: P2PEvent::NewBlockNotified,
+        payload: Some(serde_json::to_string(&block).unwrap()),
+        sender_id: app_id.clone(),
+    };
+    broadcast_message(peers, msg).await;
 }
 
 async fn on_new_block_notified(
@@ -246,5 +254,26 @@ async fn on_new_block_notified(
 
     if let Some(block) = block {
         chain.add_block(db, block);
+    }
+}
+
+pub async fn broadcast_new_txn(app_id: String, peers: Arc<FutureMutex<Peers>>, txn: Transaction) {
+    println!("Broadcast new block");
+    let msg = P2PMessage {
+        event: P2PEvent::NewTxnNotified,
+        payload: Some(serde_json::to_string(&txn).unwrap()),
+        sender_id: app_id.clone(),
+    };
+    broadcast_message(peers, msg).await;
+}
+
+async fn on_new_txn_notified(msg: &P2PMessage, chain: &mut BlockChain, peer: &Peer) {
+    println!("Got new txn from {}", peer.address);
+    let txn: Option<Transaction> = msg
+        .payload
+        .as_ref()
+        .map(|payload| serde_json::from_str(payload).unwrap());
+    if let Some(txn) = txn {
+        chain.mempool.push(txn);
     }
 }
