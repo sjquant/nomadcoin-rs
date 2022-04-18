@@ -249,6 +249,7 @@ async fn sse_get(
     let peer = Peer::new(peer_id.as_str(), peer_addr.as_str());
     let mut rx = queue.subscribe();
     let app_id = app_id_state.inner().clone();
+    let openport = rocket_config.port;
 
     {
         let mut db = get_db();
@@ -259,12 +260,15 @@ async fn sse_get(
             &mut db,
             peers_state.inner().clone(),
             &peer,
-            rocket_config.port,
+            openport,
+            false,
         )
         .await;
     }
 
     let cloned_chain = chain_state.inner().clone();
+    let cloned_peers = peers_state.inner().clone();
+
     EventStream! {
         loop {
             let msg = select! {
@@ -284,7 +288,7 @@ async fn sse_get(
             }
             let mut chain = cloned_chain.lock().await;
             let mut db = get_db();
-            handle_message(app_id, &mut chain, &mut db, &peer, &msg).await;
+            handle_message(app_id, &mut chain, &mut db, &peer, &msg, cloned_peers.clone(), openport).await;
             yield Event::json(&msg.event);
         }
     }
@@ -323,6 +327,7 @@ async fn add_peer(
         peers_state.inner().clone(),
         &peer,
         rocket_config.port,
+        true,
     )
     .await;
 }

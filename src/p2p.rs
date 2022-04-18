@@ -54,6 +54,7 @@ pub async fn add_peer_to_peers(
     peers: Arc<FutureMutex<Peers>>,
     peer: &Peer,
     openport: u16,
+    should_broadcast: bool,
 ) {
     {
         let mut peers = peers.lock().await;
@@ -65,6 +66,7 @@ pub async fn add_peer_to_peers(
 
     let address = peer.address.clone();
     let newest_block = chain.get_block(db, chain.newest_hash.clone());
+    let peer = peer.clone();
 
     tokio::spawn(async move {
         let mut es = EventSource::get(format!("http://{}/sse?openport={}", &address, openport));
@@ -73,6 +75,9 @@ pub async fn add_peer_to_peers(
                 Ok(Event::Open) => {
                     println!("Connection Open!");
                     send_newest_block(app_id.clone(), &address, newest_block.clone()).await;
+                    if should_broadcast {
+                        broadcast_new_peer(app_id.clone(), peers.clone(), peer.clone()).await;
+                    }
                 }
                 Err(err) => {
                     println!("Error: {}", err);
@@ -93,6 +98,7 @@ pub enum P2PEvent {
     AllBlocksRecevied,
     NewBlockNotified,
     NewTxnNotified,
+    NewPeerNotified,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,8 +119,8 @@ async fn send_message(address: &str, msg: P2PMessage) {
 
 async fn broadcast_message(peers: Arc<FutureMutex<Peers>>, msg: P2PMessage) {
     let peers = peers.lock().await;
-    for peer in peers.map.keys() {
-        send_message(peer, msg.clone()).await;
+    for address in peers.map.keys() {
+        send_message(address, msg.clone()).await;
     }
 }
 
@@ -124,6 +130,8 @@ pub async fn handle_message(
     db: &mut PickleDb,
     peer: &Peer,
     msg: &P2PMessage,
+    peers: Arc<FutureMutex<Peers>>,
+    openport: u16,
 ) {
     match msg.event {
         P2PEvent::NewestBlockReceived => {
@@ -140,6 +148,38 @@ pub async fn handle_message(
         }
         P2PEvent::NewTxnNotified => {
             on_new_txn_notified(msg, chain, peer).await;
+        }
+        P2PEvent::NewPeerNotified => {
+            on_new_peer_notified(app_id, msg, chain, db, peer, peers, openport).await;
+        }
+    }
+}
+
+async fn on_new_peer_notified(
+    app_id: String,
+    msg: &P2PMessage,
+    chain: &BlockChain,
+    db: &mut PickleDb,
+    peer: &Peer,
+    peers: Arc<FutureMutex<Peers>>,
+    openport: u16,
+) {
+    println!("New peer notified from {}", peer.address.as_str());
+    let new_peer = serde_json::from_str::<Peer>(msg.payload.as_ref().unwrap()).unwrap();
+    add_peer_to_peers(app_id, chain, db, peers, &new_peer, openport, false).await;
+}
+
+async fn broadcast_new_peer(app_id: String, peers: Arc<FutureMutex<Peers>>, new_peer: Peer) {
+    println!("Broadcast new peer {}", new_peer.address.as_str());
+    let msg = P2PMessage {
+        event: P2PEvent::NewPeerNotified,
+        payload: Some(serde_json::to_string(&new_peer).unwrap()),
+        sender_id: app_id.clone(),
+    };
+    let peers = peers.lock().await;
+    for address in peers.map.keys() {
+        if &new_peer.address != address {
+            send_message(address, msg.clone()).await;
         }
     }
 }
