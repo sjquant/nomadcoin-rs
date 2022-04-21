@@ -135,32 +135,32 @@ pub async fn handle_message(
 ) {
     match msg.event {
         P2PEvent::NewestBlockReceived => {
-            on_newest_block_received(app_id, msg, chain, db, peer).await;
+            on_newest_block_received(app_id, chain, db, peer, msg, peers, openport).await;
         }
         P2PEvent::AllBlocksRequested => {
-            on_all_blocks_requested(app_id, chain, db, peer).await;
+            on_all_blocks_requested(app_id, chain, db, peer, msg, peers, openport).await;
         }
         P2PEvent::AllBlocksRecevied => {
-            on_all_blocks_received(msg, chain, db, peer).await;
+            on_all_blocks_received(app_id, chain, db, peer, msg, peers, openport).await;
         }
         P2PEvent::NewBlockNotified => {
-            on_new_block_notified(msg, chain, db, peer).await;
+            on_new_block_notified(app_id, chain, db, peer, msg, peers, openport).await;
         }
         P2PEvent::NewTxnNotified => {
-            on_new_txn_notified(msg, chain, peer).await;
+            on_new_txn_notified(app_id, chain, db, peer, msg, peers, openport).await;
         }
         P2PEvent::NewPeerNotified => {
-            on_new_peer_notified(app_id, msg, chain, db, peer, peers, openport).await;
+            on_new_peer_notified(app_id, chain, db, peer, msg, peers, openport).await;
         }
     }
 }
 
 async fn on_new_peer_notified(
     app_id: String,
-    msg: &P2PMessage,
-    chain: &BlockChain,
+    chain: &mut BlockChain,
     db: &mut PickleDb,
     peer: &Peer,
+    msg: &P2PMessage,
     peers: Arc<FutureMutex<Peers>>,
     openport: u16,
 ) {
@@ -186,10 +186,12 @@ async fn broadcast_new_peer(app_id: String, peers: Arc<FutureMutex<Peers>>, new_
 
 async fn on_newest_block_received(
     app_id: String,
-    msg: &P2PMessage,
-    chain: &BlockChain,
+    chain: &mut BlockChain,
     db: &mut PickleDb,
     peer: &Peer,
+    msg: &P2PMessage,
+    _peers: Arc<FutureMutex<Peers>>,
+    _openport: u16,
 ) {
     println!("Got newest block from {}", peer.address);
     let peer_newest_block = msg.payload.as_ref().map_or(None, |payload| {
@@ -234,9 +236,12 @@ async fn send_newest_block(app_id: String, address: &str, newest_block: Option<B
 
 async fn on_all_blocks_requested(
     app_id: String,
-    chain: &BlockChain,
+    chain: &mut BlockChain,
     db: &mut PickleDb,
     peer: &Peer,
+    _msg: &P2PMessage,
+    _peers: Arc<FutureMutex<Peers>>,
+    _openport: u16,
 ) {
     println!("All blocks requested from {}", peer.address);
     let blocks = chain.all_blocks(db);
@@ -254,10 +259,13 @@ async fn send_all_blocks(app_id: String, address: &str, all_blocks: Vec<Block>) 
 }
 
 async fn on_all_blocks_received(
-    msg: &P2PMessage,
+    _app_id: String,
     chain: &mut BlockChain,
     db: &mut PickleDb,
     peer: &Peer,
+    msg: &P2PMessage,
+    _peers: Arc<FutureMutex<Peers>>,
+    _openport: u16,
 ) {
     println!("Got all blocks from {}", peer.address);
     let blocks: Option<Vec<Block>> = msg
@@ -281,10 +289,13 @@ pub async fn broadcast_new_block(app_id: String, peers: Arc<FutureMutex<Peers>>,
 }
 
 async fn on_new_block_notified(
-    msg: &P2PMessage,
+    _app_id: String,
     chain: &mut BlockChain,
     db: &mut PickleDb,
     peer: &Peer,
+    msg: &P2PMessage,
+    _peers: Arc<FutureMutex<Peers>>,
+    _openport: u16,
 ) {
     println!("Got new block from {}", peer.address);
     let block: Option<Block> = msg
@@ -307,7 +318,15 @@ pub async fn broadcast_new_txn(app_id: String, peers: Arc<FutureMutex<Peers>>, t
     broadcast_message(peers, msg).await;
 }
 
-async fn on_new_txn_notified(msg: &P2PMessage, chain: &mut BlockChain, peer: &Peer) {
+async fn on_new_txn_notified(
+    _app_id: String,
+    chain: &mut BlockChain,
+    _db: &mut PickleDb,
+    peer: &Peer,
+    msg: &P2PMessage,
+    _peers: Arc<FutureMutex<Peers>>,
+    _openport: u16,
+) {
     println!("Got new txn from {}", peer.address);
     let txn: Option<Transaction> = msg
         .payload
