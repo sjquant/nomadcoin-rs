@@ -124,7 +124,7 @@ async fn broadcast_message(peers: Arc<FutureMutex<Peers>>, msg: P2PMessage) {
     }
 }
 
-pub async fn handle_message(
+pub async fn on_p2p_event(
     app_id: String,
     chain: &mut BlockChain,
     db: &mut PickleDb,

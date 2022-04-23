@@ -2,7 +2,7 @@
 extern crate rocket;
 use futures::lock::Mutex;
 use nomadcoin::p2p::{
-    add_peer_to_peers, broadcast_new_block, broadcast_new_txn, handle_message, P2PMessage, Peer,
+    add_peer_to_peers, broadcast_new_block, broadcast_new_txn, on_p2p_event, P2PMessage, Peer,
     Peers,
 };
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
@@ -288,7 +288,7 @@ async fn sse_get(
             }
             let mut chain = cloned_chain.lock().await;
             let mut db = get_db();
-            handle_message(app_id, &mut chain, &mut db, &peer, &msg, cloned_peers.clone(), openport).await;
+            on_p2p_event(app_id, &mut chain, &mut db, &peer, &msg, cloned_peers.clone(), openport).await;
             yield Event::json(&msg.event);
         }
     }
