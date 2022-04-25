@@ -1,6 +1,5 @@
 use futures::lock::Mutex as FutureMutex;
 use futures::stream::StreamExt;
-use pickledb::PickleDb;
 use reqwest_eventsource::{Event, EventSource};
 use rocket::serde::json::serde_json;
 use serde::{Deserialize, Serialize};
@@ -49,8 +48,7 @@ impl Peer {
 
 pub async fn add_peer_to_peers(
     app_id: String,
-    chain: &BlockChain,
-    db: &mut PickleDb,
+    chain: &mut BlockChain,
     peers: Arc<FutureMutex<Peers>>,
     peer: &Peer,
     openport: u16,
@@ -65,7 +63,7 @@ pub async fn add_peer_to_peers(
     }
 
     let address = peer.address.clone();
-    let newest_block = chain.get_block(db, chain.newest_hash.clone());
+    let newest_block = chain.newest_block();
     let peer = peer.clone();
 
     tokio::spawn(async move {
@@ -127,7 +125,6 @@ async fn broadcast_message(peers: Arc<FutureMutex<Peers>>, msg: P2PMessage) {
 pub async fn on_p2p_event(
     app_id: String,
     chain: &mut BlockChain,
-    db: &mut PickleDb,
     peer: &Peer,
     msg: &P2PMessage,
     peers: Arc<FutureMutex<Peers>>,
@@ -135,22 +132,22 @@ pub async fn on_p2p_event(
 ) {
     match msg.event {
         P2PEvent::NewestBlockReceived => {
-            on_newest_block_received(app_id, chain, db, peer, msg, peers, openport).await;
+            on_newest_block_received(app_id, chain, peer, msg, peers, openport).await;
         }
         P2PEvent::AllBlocksRequested => {
-            on_all_blocks_requested(app_id, chain, db, peer, msg, peers, openport).await;
+            on_all_blocks_requested(app_id, chain, peer, msg, peers, openport).await;
         }
         P2PEvent::AllBlocksRecevied => {
-            on_all_blocks_received(app_id, chain, db, peer, msg, peers, openport).await;
+            on_all_blocks_received(app_id, chain, peer, msg, peers, openport).await;
         }
         P2PEvent::NewBlockNotified => {
-            on_new_block_notified(app_id, chain, db, peer, msg, peers, openport).await;
+            on_new_block_notified(app_id, chain, peer, msg, peers, openport).await;
         }
         P2PEvent::NewTxnNotified => {
-            on_new_txn_notified(app_id, chain, db, peer, msg, peers, openport).await;
+            on_new_txn_notified(app_id, chain, peer, msg, peers, openport).await;
         }
         P2PEvent::NewPeerNotified => {
-            on_new_peer_notified(app_id, chain, db, peer, msg, peers, openport).await;
+            on_new_peer_notified(app_id, chain, peer, msg, peers, openport).await;
         }
     }
 }
@@ -158,7 +155,6 @@ pub async fn on_p2p_event(
 async fn on_new_peer_notified(
     app_id: String,
     chain: &mut BlockChain,
-    db: &mut PickleDb,
     peer: &Peer,
     msg: &P2PMessage,
     peers: Arc<FutureMutex<Peers>>,
@@ -166,7 +162,7 @@ async fn on_new_peer_notified(
 ) {
     println!("New peer notified from {}", peer.address.as_str());
     let new_peer = serde_json::from_str::<Peer>(msg.payload.as_ref().unwrap()).unwrap();
-    add_peer_to_peers(app_id, chain, db, peers, &new_peer, openport, false).await;
+    add_peer_to_peers(app_id, chain, peers, &new_peer, openport, false).await;
 }
 
 async fn broadcast_new_peer(app_id: String, peers: Arc<FutureMutex<Peers>>, new_peer: Peer) {
@@ -187,7 +183,6 @@ async fn broadcast_new_peer(app_id: String, peers: Arc<FutureMutex<Peers>>, new_
 async fn on_newest_block_received(
     app_id: String,
     chain: &mut BlockChain,
-    db: &mut PickleDb,
     peer: &Peer,
     msg: &P2PMessage,
     _peers: Arc<FutureMutex<Peers>>,
@@ -197,7 +192,7 @@ async fn on_newest_block_received(
     let peer_newest_block = msg.payload.as_ref().map_or(None, |payload| {
         Some(serde_json::from_str::<Block>(payload).unwrap())
     });
-    let own_newest_block = chain.get_block(db, chain.newest_hash.clone());
+    let own_newest_block = chain.newest_block();
     if let Some(peer_newest_block) = peer_newest_block {
         // TODO: improve this to send message after all connection is established
         // Give time for connection to be established
@@ -237,14 +232,13 @@ async fn send_newest_block(app_id: String, address: &str, newest_block: Option<B
 async fn on_all_blocks_requested(
     app_id: String,
     chain: &mut BlockChain,
-    db: &mut PickleDb,
     peer: &Peer,
     _msg: &P2PMessage,
     _peers: Arc<FutureMutex<Peers>>,
     _openport: u16,
 ) {
     println!("All blocks requested from {}", peer.address);
-    let blocks = chain.all_blocks(db);
+    let blocks = chain.all_blocks();
     send_all_blocks(app_id, &peer.address, blocks).await;
 }
 
@@ -261,7 +255,6 @@ async fn send_all_blocks(app_id: String, address: &str, all_blocks: Vec<Block>) 
 async fn on_all_blocks_received(
     _app_id: String,
     chain: &mut BlockChain,
-    db: &mut PickleDb,
     peer: &Peer,
     msg: &P2PMessage,
     _peers: Arc<FutureMutex<Peers>>,
@@ -274,7 +267,10 @@ async fn on_all_blocks_received(
         .map(|payload| serde_json::from_str(payload).unwrap());
 
     if let Some(blocks) = blocks {
-        chain.replace(db, blocks);
+        if blocks.is_empty() {
+            return;
+        }
+        chain.replace(blocks);
     }
 }
 
@@ -291,7 +287,6 @@ pub async fn broadcast_new_block(app_id: String, peers: Arc<FutureMutex<Peers>>,
 async fn on_new_block_notified(
     _app_id: String,
     chain: &mut BlockChain,
-    db: &mut PickleDb,
     peer: &Peer,
     msg: &P2PMessage,
     _peers: Arc<FutureMutex<Peers>>,
@@ -304,7 +299,7 @@ async fn on_new_block_notified(
         .map(|payload| serde_json::from_str(payload).unwrap());
 
     if let Some(block) = block {
-        chain.add_block(db, block);
+        chain.add_block(block);
     }
 }
 
@@ -321,7 +316,6 @@ pub async fn broadcast_new_txn(app_id: String, peers: Arc<FutureMutex<Peers>>, t
 async fn on_new_txn_notified(
     _app_id: String,
     chain: &mut BlockChain,
-    _db: &mut PickleDb,
     peer: &Peer,
     msg: &P2PMessage,
     _peers: Arc<FutureMutex<Peers>>,
@@ -333,6 +327,6 @@ async fn on_new_txn_notified(
         .as_ref()
         .map(|payload| serde_json::from_str(payload).unwrap());
     if let Some(txn) = txn {
-        chain.mempool.push(txn);
+        chain.add_txn_to_mempool(txn);
     }
 }

@@ -5,7 +5,7 @@ GET http://localhost:8000/
 GET http://localhost:8000/blocks
 
 ### Mine a block
-POST http://localhost:8001/blocks
+POST http://localhost:8000/blocks
 
 {
     "address": "0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975"
@@ -37,15 +37,6 @@ POST http://localhost:8000/transactions
 
 ### Get my wallet address
 GET http://localhost:8000/my-wallet
-
-
-### Send message to server-side-events
-POST http://localhost:8000/sse
-    
-{
-    "event": "NewestBlockReceived",
-    "payload": "Hello, world!"
-}
 
 ### See peers
 GET http://localhost:8000/peers
