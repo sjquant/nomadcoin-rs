@@ -5,8 +5,8 @@ use nomadcoin::p2p::{
     add_peer_to_peers, broadcast_new_block, broadcast_new_txn, on_p2p_event, P2PMessage, Peer,
     Peers,
 };
+use nomadcoin::repo::PickleDBRepository;
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
-use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::http::Status;
 use rocket::response::stream::{Event, EventStream};
 use rocket::serde::{json::Json, Deserialize, Serialize};
@@ -51,21 +51,10 @@ fn url(path: &str) -> String {
     format!("http://localhost:8000{}", path)
 }
 
-fn get_db() -> PickleDb {
+fn get_repo() -> PickleDBRepository {
     let port = std::env::var("ROCKET_PORT").unwrap();
     let db_path = format!("blockchain_{}.db", port);
-    match PickleDb::load(
-        db_path.as_str(),
-        PickleDbDumpPolicy::AutoDump,
-        SerializationMethod::Json,
-    ) {
-        Ok(load) => load,
-        Err(_) => PickleDb::new(
-            db_path.as_str(),
-            PickleDbDumpPolicy::AutoDump,
-            SerializationMethod::Json,
-        ),
-    }
+    return PickleDBRepository::new(&db_path);
 }
 
 #[get("/")]
@@ -138,8 +127,7 @@ async fn documentation() -> Json<Vec<URLDescription>> {
 #[get("/blocks")]
 async fn fetch_blocks(chain_state: &State<Arc<Mutex<BlockChain>>>) -> Json<Vec<Block>> {
     let chain = chain_state.lock().await;
-    let mut db = get_db();
-    let blocks = chain.all_blocks(&mut db);
+    let blocks = chain.all_blocks();
     Json(blocks)
 }
 
@@ -151,8 +139,7 @@ async fn add_block(
     app_id_state: &State<String>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
-    let mut db = get_db();
-    let block = chain.mine_block(&mut db, body.address.as_str());
+    let block = chain.mine_block(body.address.as_str());
     broadcast_new_block(
         app_id_state.inner().clone(),
         peers_state.inner().clone(),
@@ -168,8 +155,7 @@ async fn get_block(
     hash: String,
 ) -> Option<Json<Block>> {
     let chain = chain_state.lock().await;
-    let mut db = get_db();
-    match chain.get_block(&mut db, hash) {
+    match chain.get_block(hash) {
         Some(block) => Some(Json(block)),
         None => None,
     }
@@ -181,8 +167,7 @@ async fn fetch_txnouts(
     address: String,
 ) -> Json<Vec<UTxnOut>> {
     let chain = chain_state.lock().await;
-    let mut db = get_db();
-    let txnouts = chain.unspent_txnouts_by_address(&mut db, address.as_str());
+    let txnouts = chain.unspent_txnouts_by_address(address.as_str());
     Json(txnouts)
 }
 
@@ -192,16 +177,14 @@ async fn get_balance(
     address: String,
 ) -> Json<BalanceRespone> {
     let chain = chain_state.lock().await;
-    let mut db = get_db();
-    let balance = chain.balance_by_address(&mut db, address.as_str());
+    let balance = chain.balance_by_address(address.as_str());
     Json(BalanceRespone { address, balance })
 }
 
 #[get("/mempool")]
 async fn mempool(chain_state: &State<Arc<Mutex<BlockChain>>>) -> Json<Vec<Transaction>> {
     let chain = chain_state.lock().await;
-    let mempool = chain.mempool.clone();
-    Json(mempool)
+    Json(chain.mempool())
 }
 
 #[post("/transactions", data = "<body>")]
@@ -212,8 +195,7 @@ async fn make_transaction(
     app_id_state: &State<String>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
-    let mut db = get_db();
-    match chain.make_transaction(&mut db, body.from.as_str(), body.to.as_str(), body.amount) {
+    match chain.make_transaction(body.from.as_str(), body.to.as_str(), body.amount) {
         Ok(txn) => {
             broadcast_new_txn(
                 app_id_state.inner().clone(),
@@ -252,12 +234,10 @@ async fn sse_get(
     let openport = rocket_config.port;
 
     {
-        let mut db = get_db();
-        let chain = chain_state.lock().await;
+        let mut chain = chain_state.lock().await;
         add_peer_to_peers(
             app_id.clone(),
-            &chain,
-            &mut db,
+            &mut chain,
             peers_state.inner().clone(),
             &peer,
             openport,
@@ -287,8 +267,7 @@ async fn sse_get(
                 continue
             }
             let mut chain = cloned_chain.lock().await;
-            let mut db = get_db();
-            on_p2p_event(app_id, &mut chain, &mut db, &peer, &msg, cloned_peers.clone(), openport).await;
+            on_p2p_event(app_id, &mut chain, &peer, &msg, cloned_peers.clone(), openport).await;
             yield Event::json(&msg.event);
         }
     }
@@ -314,16 +293,14 @@ async fn add_peer(
     rocket_config: &rocket::Config,
     body: Json<AddPeerBody>,
 ) {
-    let chain = chain_state.lock().await;
-    let mut db = get_db();
+    let mut chain = chain_state.lock().await;
     let peer_address = body.address.as_str();
     let peer_id = get_peer_id_from_address(peer_address).await;
     let peer = Peer::new(peer_id.as_str(), peer_address);
     println!("Adding peer: {}", peer_address);
     add_peer_to_peers(
         app_id_state.inner().clone(),
-        &chain,
-        &mut db,
+        &mut chain,
         peers_state.inner().clone(),
         &peer,
         rocket_config.port,
@@ -348,8 +325,8 @@ async fn get_peer_id_from_address(address: &str) -> String {
 
 #[launch]
 fn rocket() -> _ {
-    let mut db = get_db();
-    let chain = Arc::new(Mutex::new(BlockChain::get(&mut db)));
+    let repo = Box::new(get_repo());
+    let chain = Arc::new(Mutex::new(BlockChain::load(repo)));
     let queue = channel::<P2PMessage>(1024).0;
     let peers = Arc::new(Mutex::new(Peers::new()));
     let app_id = Uuid::new_v4().to_string();
