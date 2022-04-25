@@ -53,11 +53,11 @@ mod tests {
     use p256::ecdsa::signature::{Signature, Verifier};
 
     use super::*;
-    use crate::test_utils;
+    use crate::testutils;
 
     #[test]
     fn get_new_wallet_creates_file() {
-        let filename = test_utils::random_string(16);
+        let filename = testutils::random_string(16);
         // When
         let wallet = Wallet::get(&filename);
 
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn get_existing_wallet_when_file_exists() {
-        let filename = test_utils::random_string(16);
+        let filename = testutils::random_string(16);
         // Given
         let a_key = SigningKey::random(&mut OsRng);
         store_key_to_file(&filename, &a_key).unwrap();
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn sign_data() {
         // Given
-        let filename = test_utils::random_string(16);
+        let filename = testutils::random_string(16);
         let wallet = Wallet::get(&filename);
         let hashed_string = hex::encode("hello, world");
         // When

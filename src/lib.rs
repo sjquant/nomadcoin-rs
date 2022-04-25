@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod test_utils;
+mod testutils;
 
 pub mod block;
 pub mod blockchain;

@@ -257,13 +257,13 @@ fn persist_block(db: &mut PickleDb, block: &Block) {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils;
+    use crate::testutils;
 
     use super::*;
 
     #[test]
     fn get_new_blockchain() {
-        let (_r, mut db) = test_utils::test_db();
+        let (_r, mut db) = testutils::test_db();
         let chain = BlockChain::get(&mut db);
         assert_eq!(chain.newest_hash, "");
         assert_eq!(chain.height, 0);
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn get_blockchain_from_db() {
         // Given
-        let (_r, mut db) = test_utils::test_db();
+        let (_r, mut db) = testutils::test_db();
 
         {
             let mut chain = BlockChain::get(&mut db);
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn mine_block() {
         // Given
-        let (_r, mut db) = test_utils::test_db();
+        let (_r, mut db) = testutils::test_db();
 
         // When
         let mut chain = BlockChain::get(&mut db);
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn make_transaction() {
         // Given
-        let (_r, mut db) = test_utils::test_db();
+        let (_r, mut db) = testutils::test_db();
         let mut chain = BlockChain::get(&mut db);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn mine_block_confirms_transaction() {
         // Given
-        let (_r, mut db) = test_utils::test_db();
+        let (_r, mut db) = testutils::test_db();
         let mut chain = BlockChain::get(&mut db);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn cannot_make_transaction_when_balance_is_not_enough() {
         // Given
-        let (_r, mut db) = test_utils::test_db();
+        let (_r, mut db) = testutils::test_db();
         let mut chain = BlockChain::get(&mut db);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
