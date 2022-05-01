@@ -26,7 +26,7 @@ fn verify_msg(public_key_str: &str, msg: &str, signature_str: &str) -> bool {
     public_key.verify(msg_as_bytes, &signature).is_ok()
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BlockChainSnapshot {
     pub newest_hash: String,
     pub height: u64,
@@ -67,7 +67,7 @@ impl BlockChain {
         let difficulty = self.calc_difficulty();
         let block = Block::mine(
             address,
-            self.snapshot.newest_hash.clone(),
+            self.snapshot.newest_hash.as_str(),
             self.snapshot.height + 1,
             difficulty,
             &mut self.snapshot.mempool,
@@ -268,115 +268,115 @@ impl BlockChain {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::testutils;
+#[cfg(test)]
+mod tests {
+    use crate::repo::TestRepository;
 
-//     use super::*;
+    use super::*;
 
-//     #[test]
-//     fn get_new_blockchain() {
-//         let (_r, mut db) = testutils::test_db();
-//         let chain = BlockChain::get(&mut db);
-//         assert_eq!(chain.newest_hash, "");
-//         assert_eq!(chain.height, 0);
-//     }
+    #[test]
+    fn load_new_blockchain() {
+        let test_repo = Box::new(TestRepository::new());
+        let chain = BlockChain::load(test_repo);
+        assert_eq!(chain.snapshot.newest_hash, "");
+        assert_eq!(chain.snapshot.height, 0);
+    }
 
-//     #[test]
-//     fn get_blockchain_from_db() {
-//         // Given
-//         let (_r, mut db) = testutils::test_db();
+    #[test]
+    fn load_blockchain_from_db() {
+        // Given
+        let test_repo = TestRepository::new();
+        let mut test_snapshot = BlockChainSnapshot::new();
+        let block1 = Block::mine("some_address", "", 1, 1, &mut vec![]);
+        let block2 = Block::mine("some_address", block1.hash.as_str(), 2, 1, &mut vec![]);
+        test_snapshot.height = 2;
+        test_snapshot.newest_hash = block2.hash.clone();
 
-//         {
-//             let mut chain = BlockChain::get(&mut db);
-//             chain.mine_block(&mut db, "some-address");
-//             chain.mine_block(&mut db, "some-address");
-//         }
+        test_repo.save_snapshot(&test_snapshot).unwrap();
+        test_repo.save_block(&block1).unwrap();
+        test_repo.save_block(&block2).unwrap();
 
-//         // When
-//         let chain = BlockChain::get(&mut db);
+        // When
+        let chain = BlockChain::load(Box::new(test_repo));
 
-//         // Then
-//         assert_eq!(chain.height, 2);
-//     }
+        // Then
+        assert_eq!(chain.snapshot.height, 2);
+        assert_eq!(chain.all_blocks(), vec![block2, block1]);
+    }
 
-//     #[test]
-//     fn mine_block() {
-//         // Given
-//         let (_r, mut db) = testutils::test_db();
+    #[test]
+    fn mine_block() {
+        // Given
+        let test_repo = Box::new(TestRepository::new());
 
-//         // When
-//         let mut chain = BlockChain::get(&mut db);
-//         chain.mine_block(&mut db, "some-address");
-//         chain.mine_block(&mut db, "some-address");
+        // When
+        let mut chain = BlockChain::load(test_repo);
+        chain.mine_block("some-address");
+        chain.mine_block("some-address");
 
-//         // Then
-//         let blocks = chain.all_blocks(&mut db);
-//         assert_eq!(blocks.len(), 2);
-//     }
+        // Then
+        let blocks = chain.all_blocks();
+        assert_eq!(blocks.len(), 2);
+    }
 
-//     #[test]
-//     fn make_transaction() {
-//         // Given
-//         let (_r, mut db) = testutils::test_db();
-//         let mut chain = BlockChain::get(&mut db);
-//         let wallet = Wallet::get("nico.wallet");
-//         let address = wallet.address.as_str();
-//         chain.mine_block(&mut db, address); // Earn 50 by mining block
+    #[test]
+    fn make_transaction() {
+        // Given
+        let test_repo = Box::new(TestRepository::new());
+        let mut chain = BlockChain::load(test_repo);
+        let wallet = Wallet::get("nico.wallet");
+        let address = wallet.address.as_str();
+        chain.mine_block(address); // Earn 50 by mining block
 
-//         // When
-//         chain
-//             .make_transaction(&mut db, address, "to-address", 20)
-//             .unwrap();
+        // When
+        chain.make_transaction(address, "to-address", 20).unwrap();
 
-//         // Then
-//         let mem_txn = chain.mempool[0].clone();
-//         assert_eq!(chain.balance_by_address(&mut db, address), 0); // balance not yet changed
-//         assert_eq!(mem_txn.txn_ins[0].amount, 50);
-//         assert_eq!(mem_txn.txn_outs[0].address, String::from(address));
-//         assert_eq!(mem_txn.txn_outs[0].amount, 30);
-//         assert_eq!(mem_txn.txn_outs[1].address, String::from("to-address"));
-//         assert_eq!(mem_txn.txn_outs[1].amount, 20);
-//     }
+        // Then
+        let mem_txn = chain.mempool()[0].clone();
+        assert_eq!(chain.balance_by_address(address), 0); // balance not yet changed
+        assert_eq!(mem_txn.txn_ins[0].amount, 50);
+        assert_eq!(mem_txn.txn_outs[0].address, String::from(address));
+        assert_eq!(mem_txn.txn_outs[0].amount, 30);
+        assert_eq!(mem_txn.txn_outs[1].address, String::from("to-address"));
+        assert_eq!(mem_txn.txn_outs[1].amount, 20);
+    }
 
-//     #[test]
-//     fn mine_block_confirms_transaction() {
-//         // Given
-//         let (_r, mut db) = testutils::test_db();
-//         let mut chain = BlockChain::get(&mut db);
-//         let wallet = Wallet::get("nico.wallet");
-//         let address = wallet.address.as_str();
-//         chain.mine_block(&mut db, address); // Earn 50 by mining block
-//         chain
-//             .make_transaction(&mut db, address, "john", 20)
-//             .unwrap();
+    #[test]
+    fn mine_block_confirms_transaction() {
+        // Given
+        let test_repo = Box::new(TestRepository::new());
+        let mut chain = BlockChain::load(test_repo);
+        let wallet = Wallet::get("nico.wallet");
+        let address = wallet.address.as_str();
+        chain.mine_block(address); // Earn 50 by mining block
+        chain.make_transaction(address, "john", 20).unwrap();
 
-//         // When
-//         chain.mine_block(&mut db, address); // Earn another 50 by mining block
+        // When
+        chain.mine_block(address); // Earn another 50 by mining block
 
-//         // Then
-//         assert_eq!(chain.balance_by_address(&mut db, address), 80);
-//         assert_eq!(chain.balance_by_address(&mut db, "john"), 20);
-//         assert_eq!(chain.mempool.len(), 0);
-//     }
+        // Then
+        assert_eq!(chain.balance_by_address(address), 80);
+        assert_eq!(chain.balance_by_address("john"), 20);
+        assert_eq!(chain.mempool().len(), 0);
+    }
 
-//     #[test]
-//     fn cannot_make_transaction_when_balance_is_not_enough() {
-//         // Given
-//         let (_r, mut db) = testutils::test_db();
-//         let mut chain = BlockChain::get(&mut db);
-//         let wallet = Wallet::get("nico.wallet");
-//         let address = wallet.address.as_str();
+    #[test]
+    fn cannot_make_transaction_when_balance_is_not_enough() {
+        // Given
+        let test_repo = Box::new(TestRepository::new());
+        let mut chain = BlockChain::load(test_repo);
+        let wallet = Wallet::get("nico.wallet");
+        let address = wallet.address.as_str();
 
-//         // Earn 50 by mining block
-//         chain.mine_block(&mut db, address);
+        // Earn 50 by mining block
+        chain.mine_block(address);
 
-//         // When
-//         let err = chain
-//             .make_transaction(&mut db, address, "to-address", 60)
-//             .unwrap_err();
+        // When
+        let err = chain
+            .make_transaction(address, "to-address", 60)
+            .unwrap_err();
 
-//         // Then
-//         assert_eq!(err.msg, String::from("Not enough balance"));
-//     }
-// }
+        // Then
+        assert_eq!(err.msg, String::from("Not enough balance"));
+    }
+}
