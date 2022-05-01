@@ -1,4 +1,4 @@
-use std::io::Error;
+use std::{collections::HashMap, io::Error, sync::Mutex};
 
 use crate::{Block, BlockChainSnapshot};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
@@ -62,6 +62,44 @@ impl BaseRepository for PickleDBRepository {
         for key in conn.get_all().into_iter() {
             let _ = conn.rem(key.as_str());
         }
+        Ok(())
+    }
+}
+
+pub struct TestRepository {
+    snapshot: Mutex<Option<BlockChainSnapshot>>,
+    blocks: Mutex<HashMap<String, Block>>,
+}
+
+impl TestRepository {
+    pub fn new() -> Self {
+        Self {
+            snapshot: Mutex::new(None),
+            blocks: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+impl BaseRepository for TestRepository {
+    fn load_snapshot(&self) -> Option<BlockChainSnapshot> {
+        self.snapshot.lock().unwrap().clone()
+    }
+    fn get_block(&self, hash: String) -> Option<Block> {
+        self.blocks.lock().unwrap().get(&hash).cloned()
+    }
+    fn save_snapshot(&self, snapshot: &BlockChainSnapshot) -> Result<(), Error> {
+        *self.snapshot.lock().unwrap() = Some(snapshot.clone());
+        Ok(())
+    }
+    fn save_block(&self, block: &Block) -> Result<(), Error> {
+        self.blocks
+            .lock()
+            .unwrap()
+            .insert(block.hash.clone(), block.clone());
+        Ok(())
+    }
+    fn remove_all_blocks(&self) -> Result<(), Error> {
+        self.blocks.lock().unwrap().clear();
         Ok(())
     }
 }

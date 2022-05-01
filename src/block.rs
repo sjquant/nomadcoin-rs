@@ -18,7 +18,7 @@ pub struct Block {
 impl Block {
     pub fn mine(
         address: &str,
-        prev_hash: String,
+        prev_hash: &str,
         height: u64,
         difficulty: u16,
         mempool: &mut Vec<Transaction>,
@@ -43,7 +43,7 @@ impl Block {
         }
 
         Block {
-            prev_hash: prev_hash,
+            prev_hash: prev_hash.to_string(),
             hash: hash,
             height: height,
             difficulty: difficulty,
