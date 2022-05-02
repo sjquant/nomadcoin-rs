@@ -2,7 +2,6 @@ use std::vec;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::Wallet;
 
@@ -19,7 +18,7 @@ pub struct Transaction {
 impl Transaction {
     pub fn from_coinbase(address: &str) -> Self {
         let mut coinbase_txn_in = TxnIn::new("", -1, MINER_REWARD);
-        coinbase_txn_in.sign("COINBASE");
+        coinbase_txn_in.set_signature("COINBASE");
         let txn_ins = vec![coinbase_txn_in];
         let txn_outs = vec![TxnOut::new(address, MINER_REWARD)];
         Transaction::new(txn_ins, txn_outs)
@@ -27,10 +26,8 @@ impl Transaction {
 
     pub fn new(txn_ins: Vec<TxnIn>, txn_outs: Vec<TxnOut>) -> Self {
         let timestamp = Utc::now().timestamp();
-        let payload = format!("{:?}{:?}{}", txn_ins, txn_outs, timestamp);
-        let hash = format!("{:x}", Sha256::digest(payload.as_bytes()));
         Transaction {
-            id: hash,
+            id: uuid::Uuid::new_v4().to_string(),
             timestamp,
             txn_ins,
             txn_outs,
@@ -41,7 +38,7 @@ impl Transaction {
         let msg = hex::encode(&self.id);
         let signature = wallet.sign(msg.as_str());
         for txn_in in &mut self.txn_ins {
-            txn_in.sign(&signature);
+            txn_in.set_signature(&signature);
         }
     }
 }
@@ -64,7 +61,7 @@ impl TxnIn {
         }
     }
 
-    pub fn sign(&mut self, signature: &str) {
+    pub fn set_signature(&mut self, signature: &str) {
         self.signature = signature.to_string();
     }
 }

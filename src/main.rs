@@ -15,7 +15,6 @@ use rocket::tokio::sync::broadcast::{channel, error::RecvError, Sender};
 use rocket::{routes, Shutdown, State};
 use std::net::IpAddr;
 use std::sync::Arc;
-use uuid::Uuid;
 
 #[derive(Serialize)]
 struct URLDescription {
@@ -329,7 +328,7 @@ fn rocket() -> _ {
     let chain = Arc::new(Mutex::new(BlockChain::load(repo)));
     let queue = channel::<P2PMessage>(1024).0;
     let peers = Arc::new(Mutex::new(Peers::new()));
-    let app_id = Uuid::new_v4().to_string();
+    let app_id = uuid::Uuid::new_v4().to_string();
 
     rocket::build()
         .mount(
