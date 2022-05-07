@@ -17,13 +17,22 @@ const DIFFICULTY_INTERVAL: u64 = 5;
 const TIME_THRESHOLD: i64 = 36000;
 const ALLOWED_BUFFER: i64 = 7200;
 
+macro_rules! unwrap_or_return_false {
+    ( $e:expr ) => {
+        match $e {
+            Ok(x) => x,
+            Err(_) => return false,
+        }
+    };
+}
+
 fn verify_msg(public_key_str: &str, msg: &str, signature_str: &str) -> bool {
-    let public_key_as_bytes = &hex::decode(public_key_str).unwrap();
-    let public_key = VerifyingKey::from_sec1_bytes(public_key_as_bytes).unwrap();
-    let signature_as_bytes = &hex::decode(signature_str).unwrap();
-    let signature = Signature::from_bytes(signature_as_bytes).unwrap();
-    let msg_as_bytes = &hex::decode(msg).unwrap();
-    public_key.verify(msg_as_bytes, &signature).is_ok()
+    let public_key_as_bytes = unwrap_or_return_false!(hex::decode(public_key_str));
+    let public_key = unwrap_or_return_false!(VerifyingKey::from_sec1_bytes(&public_key_as_bytes));
+    let signature_as_bytes = unwrap_or_return_false!(hex::decode(signature_str));
+    let signature = unwrap_or_return_false!(Signature::from_bytes(&signature_as_bytes));
+    let msg_as_bytes = unwrap_or_return_false!(hex::decode(msg));
+    public_key.verify(&msg_as_bytes, &signature).is_ok()
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -219,6 +228,7 @@ impl BlockChain {
         from: &str,
         to: &str,
         amount: u64,
+        wallet: &Wallet,
     ) -> Result<Transaction, Error> {
         if self.balance_by_address(from) < amount {
             Err(Error::new("Not enough balance"))
@@ -240,7 +250,7 @@ impl BlockChain {
             }
             txn_outs.push(TxnOut::new(to, amount));
             let mut transaction = Transaction::new(txn_ins, txn_outs);
-            transaction.sign(Wallet::get("nico.wallet"));
+            transaction.sign(wallet);
             if !self.validate_transaction(&transaction) {
                 return Err(Error::new("Invalid transaction"));
             };
@@ -353,10 +363,12 @@ mod tests {
         chain.mine_block(address); // Earn 50 by mining bloc
 
         // When
-        chain.make_transaction(address, "to-address", 20).unwrap();
-        chain.make_transaction(address, "to-address", 10).unwrap();
-
-        println!("{}", chain.balance_by_address(address));
+        chain
+            .make_transaction(address, "to-address", 20, &wallet)
+            .unwrap();
+        chain
+            .make_transaction(address, "to-address", 10, &wallet)
+            .unwrap();
 
         // Then
         let mempool = chain.mempool();
@@ -378,7 +390,9 @@ mod tests {
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
         chain.mine_block(address); // Earn 50 by mining block
-        chain.make_transaction(address, "to-address", 20).unwrap();
+        chain
+            .make_transaction(address, "to-address", 20, &wallet)
+            .unwrap();
 
         // When
         chain.mine_block(address); // Earn another 50 by mining block
@@ -394,12 +408,15 @@ mod tests {
         // Given
         let test_repo = Box::new(TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
+        let wallet = Wallet::get("nico.wallet");
         let wrong_address = "04C72F87E9176F814714F5EF9DE2414863937D1391B02EF8BA576C89A2F69130E6032A56D01750F2638146BC898FA59695813462A49BA24B85003304DFF2BF76D4";
         chain.mine_block(wrong_address); // Earn 50 by mining block
-        
+
         // When
-        let err = chain.make_transaction(wrong_address, "to-address", 20).unwrap_err();
-        
+        let err = chain
+            .make_transaction(wrong_address, "to-address", 20, &wallet)
+            .unwrap_err();
+
         // Then
         assert_eq!(err.msg, String::from("Invalid transaction"));
     }
@@ -411,11 +428,11 @@ mod tests {
         let mut chain = BlockChain::load(test_repo);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
-        chain.mine_block(address);  // Earn 50 by mining block
+        chain.mine_block(address); // Earn 50 by mining block
 
         // When
         let err = chain
-            .make_transaction(address, "to-address", 60)
+            .make_transaction(address, "to-address", 60, &wallet)
             .unwrap_err();
 
         // Then

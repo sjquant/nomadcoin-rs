@@ -16,6 +16,11 @@ use rocket::{routes, Shutdown, State};
 use std::net::IpAddr;
 use std::sync::Arc;
 
+struct AppConfig {
+    app_id: String,
+    wallet_path: String,
+}
+
 #[derive(Serialize)]
 struct URLDescription {
     url: String,
@@ -51,7 +56,7 @@ fn url(path: &str) -> String {
 }
 
 fn get_repo() -> PickleDBRepository {
-    let port = std::env::var("ROCKET_PORT").unwrap();
+    let port = std::env::var("ROCKET_PORT").expect("ROCKET_PORT must be set");
     let db_path = format!("blockchain_{}.db", port);
     return PickleDBRepository::new(&db_path);
 }
@@ -135,12 +140,12 @@ async fn add_block(
     body: Json<MineBlockBody>,
     chain_state: &State<Arc<Mutex<BlockChain>>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
-    app_id_state: &State<String>,
+    app_config: &State<AppConfig>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
     let block = chain.mine_block(body.address.as_str());
     broadcast_new_block(
-        app_id_state.inner().clone(),
+        app_config.app_id.clone(),
         peers_state.inner().clone(),
         block,
     )
@@ -191,17 +196,13 @@ async fn make_transaction(
     body: Json<MakeTransactionBody>,
     chain_state: &State<Arc<Mutex<BlockChain>>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
-    app_id_state: &State<String>,
+    app_config: &State<AppConfig>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
-    match chain.make_transaction(body.from.as_str(), body.to.as_str(), body.amount) {
+    let wallet = Wallet::get(app_config.wallet_path.as_str());
+    match chain.make_transaction(body.from.as_str(), body.to.as_str(), body.amount, &wallet) {
         Ok(txn) => {
-            broadcast_new_txn(
-                app_id_state.inner().clone(),
-                peers_state.inner().clone(),
-                txn,
-            )
-            .await;
+            broadcast_new_txn(app_config.app_id.clone(), peers_state.inner().clone(), txn).await;
             Status::Created
         }
         Err(_) => Status::BadRequest,
@@ -222,14 +223,14 @@ async fn sse_get(
     shutdown: Shutdown,
     client_addr: IpAddr,
     rocket_config: &rocket::Config,
-    app_id_state: &State<String>,
+    app_config: &State<AppConfig>,
     openport: u16,
 ) -> EventStream![] {
     let peer_addr = format!("{}:{}", client_addr, openport);
     let peer_id = get_peer_id_from_address(peer_addr.as_str()).await;
     let peer = Peer::new(peer_id.as_str(), peer_addr.as_str());
     let mut rx = queue.subscribe();
-    let app_id = app_id_state.inner().clone();
+    let app_id = app_config.app_id.clone();
     let openport = rocket_config.port;
 
     {
@@ -288,7 +289,7 @@ async fn peers(peers_state: &State<Arc<Mutex<Peers>>>) -> Json<Vec<Peer>> {
 async fn add_peer(
     chain_state: &State<Arc<Mutex<BlockChain>>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
-    app_id_state: &State<String>,
+    app_config: &State<AppConfig>,
     rocket_config: &rocket::Config,
     body: Json<AddPeerBody>,
 ) {
@@ -298,7 +299,7 @@ async fn add_peer(
     let peer = Peer::new(peer_id.as_str(), peer_address);
     println!("Adding peer: {}", peer_address);
     add_peer_to_peers(
-        app_id_state.inner().clone(),
+        app_config.app_id.clone(),
         &mut chain,
         peers_state.inner().clone(),
         &peer,
@@ -309,8 +310,8 @@ async fn add_peer(
 }
 
 #[get("/app-id")]
-async fn app_id(app_id_state: &State<String>) -> String {
-    app_id_state.inner().clone()
+async fn app_id(app_config: &State<AppConfig>) -> String {
+    app_config.app_id.clone()
 }
 
 async fn get_peer_id_from_address(address: &str) -> String {
@@ -329,6 +330,11 @@ fn rocket() -> _ {
     let queue = channel::<P2PMessage>(1024).0;
     let peers = Arc::new(Mutex::new(Peers::new()));
     let app_id = uuid::Uuid::new_v4().to_string();
+    let wallet_path = std::env::var("WALLET_PATH").expect("WALLET_PATH must be set");
+    let app_config = AppConfig {
+        app_id,
+        wallet_path,
+    };
 
     rocket::build()
         .mount(
@@ -353,5 +359,5 @@ fn rocket() -> _ {
         .manage(chain)
         .manage(queue)
         .manage(peers)
-        .manage(app_id)
+        .manage(app_config)
 }

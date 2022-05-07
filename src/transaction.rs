@@ -34,7 +34,7 @@ impl Transaction {
         }
     }
 
-    pub fn sign(&mut self, wallet: Wallet) {
+    pub fn sign(&mut self, wallet: &Wallet) {
         let msg = hex::encode(&self.id);
         let signature = wallet.sign(msg.as_str());
         for txn_in in &mut self.txn_ins {
