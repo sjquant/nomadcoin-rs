@@ -7,6 +7,7 @@ pub mod error;
 pub mod p2p;
 pub mod repo;
 pub mod transaction;
+pub mod utils;
 pub mod wallet;
 
 pub use crate::block::Block;

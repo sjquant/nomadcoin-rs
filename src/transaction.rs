@@ -41,6 +41,27 @@ impl Transaction {
             txn_in.set_signature(&signature);
         }
     }
+
+    pub fn bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.append(&mut self.id.clone().into_bytes());
+        bytes.append(&mut self.timestamp.to_le_bytes().to_vec());
+        bytes.append(
+            &mut self
+                .txn_ins
+                .iter()
+                .flat_map(|txn_in| txn_in.bytes())
+                .collect::<Vec<u8>>(),
+        );
+        bytes.append(
+            &mut self
+                .txn_outs
+                .iter()
+                .flat_map(|txn_out| txn_out.bytes())
+                .collect::<Vec<u8>>(),
+        );
+        bytes
+    }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
@@ -64,6 +85,15 @@ impl TxnIn {
     pub fn set_signature(&mut self, signature: &str) {
         self.signature = signature.to_string();
     }
+
+    pub fn bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.append(&mut self.txn_id.clone().into_bytes());
+        bytes.append(&mut self.idx.to_le_bytes().to_vec());
+        bytes.append(&mut self.amount.to_le_bytes().to_vec());
+        bytes.append(&mut self.signature.clone().into_bytes());
+        bytes
+    }
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
@@ -78,6 +108,13 @@ impl TxnOut {
             address: address.to_string(),
             amount: amount,
         }
+    }
+
+    pub fn bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.append(&mut self.address.clone().into_bytes());
+        bytes.append(&mut self.amount.to_le_bytes().to_vec());
+        bytes
     }
 }
 
