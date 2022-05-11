@@ -1,7 +1,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::{utils, Transaction};
+use crate::{hashable::Hashable, Transaction};
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone)]
 pub struct Block {
@@ -22,50 +22,49 @@ impl Block {
         difficulty: u16,
         mempool: &mut Vec<Transaction>,
     ) -> Self {
-        let mut nonce: u64 = 0;
         let mut hash = String::from("");
         let target = std::iter::repeat("0")
             .take(difficulty.into())
             .collect::<String>();
         let txns = create_txns(address, mempool);
-        loop {
-            if hash.starts_with(&target) {
-                break;
-            }
-            hash = utils::hash(&block_bytes(
-                address, prev_hash, height, difficulty, nonce, &txns,
-            ));
-            nonce += 1;
-        }
-
-        Block {
+        let mut block = Block {
             prev_hash: prev_hash.to_string(),
-            hash: hash,
+            hash: "".to_string(),
             height: height,
             difficulty: difficulty,
-            nonce: nonce,
+            nonce: 0,
             timestamp: Utc::now().timestamp(),
             transactions: txns,
+        };
+
+        loop {
+            if hash.starts_with(&target) {
+                block.hash = hash;
+                break;
+            }
+            hash = block.hash();
+            block.nonce += 1;
         }
+        block
     }
 }
 
-fn block_bytes(
-    address: &str,
-    prev_hash: &str,
-    height: u64,
-    difficulty: u16,
-    nonce: u64,
-    txns: &Vec<Transaction>,
-) -> Vec<u8> {
-    let mut bytes = vec![];
-    bytes.append(&mut address.to_string().into_bytes());
-    bytes.append(&mut prev_hash.to_string().into_bytes());
-    bytes.append(&mut height.to_le_bytes().to_vec());
-    bytes.append(&mut difficulty.to_le_bytes().to_vec());
-    bytes.append(&mut nonce.to_le_bytes().to_vec());
-    bytes.append(&mut txns.iter().flat_map(|txn| txn.bytes()).collect::<Vec<u8>>());
-    bytes
+impl Hashable for Block {
+    fn bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.append(&mut self.prev_hash.to_string().into_bytes());
+        bytes.append(&mut self.height.to_le_bytes().to_vec());
+        bytes.append(&mut self.difficulty.to_le_bytes().to_vec());
+        bytes.append(&mut self.nonce.to_le_bytes().to_vec());
+        bytes.append(
+            &mut self
+                .transactions
+                .iter()
+                .flat_map(|txn| txn.bytes())
+                .collect::<Vec<u8>>(),
+        );
+        bytes
+    }
 }
 
 fn create_txns(address: &str, mempool: &mut Vec<Transaction>) -> Vec<Transaction> {

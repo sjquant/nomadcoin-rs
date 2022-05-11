@@ -161,13 +161,13 @@ impl BlockChain {
         self.snapshot.mempool.iter().any(|txn| {
             txn.txn_ins
                 .iter()
-                .any(|txn_in| txn_in.txn_id == utxnout.txn_id && txn_in.idx == utxnout.idx)
+                .any(|txn_in| txn_in.txn_hash == utxnout.txn_hash && txn_in.idx == utxnout.idx)
         })
     }
 
     pub fn unspent_txnouts_by_address(&self, address: &str) -> Vec<UTxnOut> {
         let mut utxnouts = vec![];
-        let mut existing_txn_ids: HashSet<&str> = HashSet::new();
+        let mut existing_txn_hashes: HashSet<&str> = HashSet::new();
         for block in self.all_blocks().iter() {
             for txn in block.transactions.iter() {
                 for txn_in in txn.txn_ins.iter() {
@@ -175,15 +175,15 @@ impl BlockChain {
                         break;
                     }
                     if txn.txn_outs[txn_in.idx as usize].address == address {
-                        existing_txn_ids.insert(txn_in.txn_id.as_str());
+                        existing_txn_hashes.insert(txn_in.txn_hash.as_str());
                     }
                 }
                 for (idx, txn_out) in txn.txn_outs.clone().into_iter().enumerate() {
                     if txn_out.address.as_str() == address
-                        && !existing_txn_ids.contains(txn.id.as_str())
+                        && !existing_txn_hashes.contains(txn.hash.as_str())
                     {
                         let utxnout =
-                            UTxnOut::new(&txn.id, idx.try_into().unwrap(), txn_out.amount);
+                            UTxnOut::new(&txn.hash, idx.try_into().unwrap(), txn_out.amount);
                         if !self.is_on_mempool(&utxnout) {
                             utxnouts.push(utxnout);
                         }
@@ -198,7 +198,7 @@ impl BlockChain {
         let blocks = self.all_blocks();
         for block in blocks.iter() {
             for txn in block.transactions.iter() {
-                if txn.id == id {
+                if txn.hash == id {
                     return Some(txn.clone());
                 }
             }
@@ -208,11 +208,11 @@ impl BlockChain {
 
     fn validate_transaction(&self, txn: &Transaction) -> bool {
         for txn_in in txn.txn_ins.iter() {
-            match self.get_transaction(txn_in.txn_id.as_str()) {
+            match self.get_transaction(txn_in.txn_hash.as_str()) {
                 Some(prev_txn) => {
                     let address = prev_txn.txn_outs[txn_in.idx as usize].address.as_str();
                     let signature = txn_in.signature.as_str();
-                    let msg = hex::encode(&txn.id);
+                    let msg = hex::encode(&txn.hash);
                     if !verify_msg(address, msg.as_str(), signature) {
                         return false;
                     }
@@ -241,7 +241,7 @@ impl BlockChain {
                 if total >= amount {
                     break;
                 }
-                txn_ins.push(TxnIn::new(&utxnout.txn_id, utxnout.idx, utxnout.amount));
+                txn_ins.push(TxnIn::new(&utxnout.txn_hash, utxnout.idx, utxnout.amount));
                 total += utxnout.amount;
             }
             // Bring changes back to transaction sender
