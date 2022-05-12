@@ -279,13 +279,13 @@ impl BlockChain {
 
 #[cfg(test)]
 mod tests {
-    use crate::repo::TestRepository;
+    use crate::testutils;
 
     use super::*;
 
     #[test]
     fn load_new_blockchain_when_repository_is_empty() {
-        let test_repo = Box::new(TestRepository::new());
+        let test_repo = Box::new(testutils::TestRepository::new());
         let chain = BlockChain::load(test_repo);
         assert_eq!(chain.snapshot.newest_hash, "");
         assert_eq!(chain.snapshot.height, 0);
@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn load_old_blockchain_when_repository_is_not_empty() {
         // Given
-        let test_repo = TestRepository::new();
+        let test_repo = testutils::TestRepository::new();
         let mut test_snapshot = BlockChainSnapshot::new();
         let block1 = Block::mine("some_address", "", 1, 1, &mut vec![]);
         let block2 = Block::mine("some_address", block1.hash.as_str(), 2, 1, &mut vec![]);
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn mining_block_records_on_blockchain() {
         // Given
-        let test_repo = Box::new(TestRepository::new());
+        let test_repo = Box::new(testutils::TestRepository::new());
 
         // When
         let mut chain = BlockChain::load(test_repo);
@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn mining_block_should_increase_miner_balance_of_address() {
         // Given
-        let test_repo = Box::new(TestRepository::new());
+        let test_repo = Box::new(testutils::TestRepository::new());
 
         // When
         let mut chain = BlockChain::load(test_repo);
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn making_transaction_changes_balance_and_mempool() {
         // Given
-        let test_repo = Box::new(TestRepository::new());
+        let test_repo = Box::new(testutils::TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn mining_block_confirms_transaction() {
         // Given
-        let test_repo = Box::new(TestRepository::new());
+        let test_repo = Box::new(testutils::TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();
@@ -406,7 +406,7 @@ mod tests {
     #[test]
     fn cannot_make_transaction_when_verification_failed() {
         // Given
-        let test_repo = Box::new(TestRepository::new());
+        let test_repo = Box::new(testutils::TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
         let wallet = Wallet::get("nico.wallet");
         let wrong_address = "04C72F87E9176F814714F5EF9DE2414863937D1391B02EF8BA576C89A2F69130E6032A56D01750F2638146BC898FA59695813462A49BA24B85003304DFF2BF76D4";
@@ -424,7 +424,7 @@ mod tests {
     #[test]
     fn cannot_make_transaction_when_balance_is_not_enough() {
         // Given
-        let test_repo = Box::new(TestRepository::new());
+        let test_repo = Box::new(testutils::TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
         let wallet = Wallet::get("nico.wallet");
         let address = wallet.address.as_str();

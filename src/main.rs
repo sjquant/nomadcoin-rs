@@ -7,6 +7,7 @@ use nomadcoin::p2p::{
 };
 use nomadcoin::repo::PickleDBRepository;
 use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
+use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::http::Status;
 use rocket::response::stream::{Event, EventStream};
 use rocket::serde::{json::Json, Deserialize, Serialize};
@@ -58,7 +59,20 @@ fn url(path: &str) -> String {
 fn get_repo() -> PickleDBRepository {
     let port = std::env::var("ROCKET_PORT").expect("ROCKET_PORT must be set");
     let db_path = format!("blockchain_{}.db", port);
-    return PickleDBRepository::new(&db_path);
+    let conn = match PickleDb::load(
+        db_path.as_str(),
+        PickleDbDumpPolicy::AutoDump,
+        SerializationMethod::Json,
+    ) {
+        Ok(load) => load,
+        Err(_) => PickleDb::new(
+            db_path.as_str(),
+            PickleDbDumpPolicy::AutoDump,
+            SerializationMethod::Json,
+        ),
+    };
+    let conn = std::sync::Mutex::new(conn);
+    return PickleDBRepository::new(conn);
 }
 
 #[get("/")]
