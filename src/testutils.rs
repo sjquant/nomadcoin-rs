@@ -1,9 +1,9 @@
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use std::path::Path;
+use std::env;
 use std::{collections::HashMap, io::Error, iter, sync::Mutex};
-use std::{env, fs};
 
+use crate::Wallet;
 use crate::{repo::BaseRepository, Block, BlockChainSnapshot};
 
 pub fn random_string(len: usize) -> String {
@@ -52,30 +52,18 @@ impl BaseRepository for TestRepository {
     }
 }
 
-pub struct DBResource {
-    path: String,
-}
-
-impl Drop for DBResource {
-    fn drop(&mut self) {
-        let path = Path::new(&self.path);
-        if path.exists() {
-            fs::remove_file(path).unwrap();
-        }
-    }
-}
-
-pub fn test_pickle_db() -> (DBResource, Mutex<PickleDb>) {
+pub fn test_pickle_db() -> Mutex<PickleDb> {
     let temp_path = env::temp_dir().join(format!("{}.db", random_string(32)));
-    let path_string = temp_path.clone().into_os_string().into_string().unwrap();
     let db = Mutex::new(PickleDb::new(
         temp_path,
         PickleDbDumpPolicy::AutoDump,
         SerializationMethod::Bin,
     ));
-    let db_resource = DBResource { path: path_string };
+    db
+}
 
-    // Order is important.
-    // db first dropped, and then db_resource dropped
-    (db_resource, db)
+pub fn test_wallet() -> Wallet {
+    let temp_path = env::temp_dir().join(format!("{}.wallet", random_string(32)));
+    let wallet = Wallet::get(temp_path.to_str().unwrap());
+    wallet
 }

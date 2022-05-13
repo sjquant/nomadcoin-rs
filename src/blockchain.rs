@@ -356,7 +356,7 @@ mod tests {
         // Given
         let test_repo = Box::new(testutils::TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
-        let wallet = Wallet::get("nico.wallet");
+        let wallet = testutils::test_wallet();
         let address = wallet.address.as_str();
         chain.mine_block(address); // Earn 50 by mining block
         chain.mine_block(address); // Earn 50 by mining block
@@ -387,7 +387,7 @@ mod tests {
         // Given
         let test_repo = Box::new(testutils::TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
-        let wallet = Wallet::get("nico.wallet");
+        let wallet = testutils::test_wallet();
         let address = wallet.address.as_str();
         chain.mine_block(address); // Earn 50 by mining block
         chain
@@ -408,7 +408,7 @@ mod tests {
         // Given
         let test_repo = Box::new(testutils::TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
-        let wallet = Wallet::get("nico.wallet");
+        let wallet = testutils::test_wallet();
         let wrong_address = "04C72F87E9176F814714F5EF9DE2414863937D1391B02EF8BA576C89A2F69130E6032A56D01750F2638146BC898FA59695813462A49BA24B85003304DFF2BF76D4";
         chain.mine_block(wrong_address); // Earn 50 by mining block
 
@@ -426,7 +426,7 @@ mod tests {
         // Given
         let test_repo = Box::new(testutils::TestRepository::new());
         let mut chain = BlockChain::load(test_repo);
-        let wallet = Wallet::get("nico.wallet");
+        let wallet = testutils::test_wallet();
         let address = wallet.address.as_str();
         chain.mine_block(address); // Earn 50 by mining block
 

@@ -19,7 +19,6 @@ use std::sync::Arc;
 
 struct AppConfig {
     app_id: String,
-    wallet_path: String,
 }
 
 #[derive(Serialize)]
@@ -211,9 +210,9 @@ async fn make_transaction(
     chain_state: &State<Arc<Mutex<BlockChain>>>,
     peers_state: &State<Arc<Mutex<Peers>>>,
     app_config: &State<AppConfig>,
+    wallet: &State<Wallet>,
 ) -> Status {
     let mut chain = chain_state.lock().await;
-    let wallet = Wallet::get(app_config.wallet_path.as_str());
     match chain.make_transaction(body.from.as_str(), body.to.as_str(), body.amount, &wallet) {
         Ok(txn) => {
             broadcast_new_txn(app_config.app_id.clone(), peers_state.inner().clone(), txn).await;
@@ -224,9 +223,8 @@ async fn make_transaction(
 }
 
 #[get("/my-wallet")]
-async fn my_wallet() -> String {
-    let wallet = Wallet::get("nico.wallet");
-    wallet.address
+async fn my_wallet(wallet: &State<Wallet>) -> String {
+    wallet.address.clone()
 }
 
 #[get("/sse?<openport>")]
@@ -345,10 +343,8 @@ fn rocket() -> _ {
     let peers = Arc::new(Mutex::new(Peers::new()));
     let app_id = uuid::Uuid::new_v4().to_string();
     let wallet_path = std::env::var("WALLET_PATH").expect("WALLET_PATH must be set");
-    let app_config = AppConfig {
-        app_id,
-        wallet_path,
-    };
+    let wallet = Wallet::get(wallet_path.as_str());
+    let app_config = AppConfig { app_id };
 
     rocket::build()
         .mount(
@@ -374,4 +370,5 @@ fn rocket() -> _ {
         .manage(queue)
         .manage(peers)
         .manage(app_config)
+        .manage(wallet)
 }

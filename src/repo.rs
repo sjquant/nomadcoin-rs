@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn test_pickle_repo_saving_snapshot_works_correctly() {
         // Given
-        let (_, conn) = testutils::test_pickle_db();
+        let conn = testutils::test_pickle_db();
         let repo = PickleDBRepository::new(conn);
         let mut snapshot = BlockChainSnapshot::new();
         snapshot.newest_hash = "newest_hash".to_string();
@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn test_pickle_repo_save_block_works_properly() {
         // Given
-        let (_, conn) = testutils::test_pickle_db();
+        let conn = testutils::test_pickle_db();
         let repo = PickleDBRepository::new(conn);
         let block = Block::mine("address", "prev_hash", 1, 1, &mut vec![]);
 
@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn test_pickle_repo_remove_all_blocks_works_properly() {
         // Given
-        let (_, conn) = testutils::test_pickle_db();
+        let conn = testutils::test_pickle_db();
         let repo = PickleDBRepository::new(conn);
         let block = Block::mine("address", "prev_hash", 1, 1, &mut vec![]);
         repo.save_block(&block).unwrap();
