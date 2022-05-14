@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{hashable::Hashable, Transaction};
 
-#[derive(PartialEq, Debug, Deserialize, Serialize, Clone)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, Clone)]
 pub struct Block {
     pub hash: String,
     pub prev_hash: String,

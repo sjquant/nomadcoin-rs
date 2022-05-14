@@ -1,12 +1,12 @@
 #[macro_use]
 extern crate rocket;
 use futures::lock::Mutex;
-use nomadcoin::p2p::{
+use nomadcoin_rs::p2p::{
     add_peer_to_peers, broadcast_new_block, broadcast_new_txn, on_p2p_event, P2PMessage, Peer,
     Peers,
 };
-use nomadcoin::repo::PickleDBRepository;
-use nomadcoin::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
+use nomadcoin_rs::repo::PickleDBRepository;
+use nomadcoin_rs::{transaction::UTxnOut, Block, BlockChain, Transaction, Wallet};
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rocket::http::Status;
 use rocket::response::stream::{Event, EventStream};
@@ -56,7 +56,7 @@ fn url(path: &str) -> String {
 }
 
 fn get_repo() -> PickleDBRepository {
-    let port = std::env::var("ROCKET_PORT").expect("ROCKET_PORT must be set");
+    let port = std::env::var("ROCKET_PORT").unwrap_or(String::from("8000"));
     let db_path = format!("blockchain_{}.db", port);
     let conn = match PickleDb::load(
         db_path.as_str(),

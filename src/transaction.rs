@@ -7,7 +7,7 @@ use crate::{hashable::Hashable, Wallet};
 
 const MINER_REWARD: u64 = 50;
 
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
 pub struct Transaction {
     pub hash: String,
     pub timestamp: i64,
@@ -69,7 +69,7 @@ impl Hashable for Transaction {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
 pub struct TxnIn {
     pub txn_hash: String,
     pub idx: i64,
@@ -103,7 +103,7 @@ impl Hashable for TxnIn {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
 pub struct TxnOut {
     pub address: String,
     pub amount: u64,
@@ -128,7 +128,7 @@ impl Hashable for TxnOut {
 }
 
 // Unspent Transaction Out
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
 pub struct UTxnOut {
     pub txn_hash: String,
     pub idx: i64,
