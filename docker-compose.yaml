@@ -1,0 +1,38 @@
+version: "3.8"
+services:
+  sjquant:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    networks:
+      - nomadcoin_rs_network
+    environment:
+      - WALLET_PATH=./sjquant.wallet
+    ports:
+      - "8000:8000"
+
+  nico:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    networks:
+      - nomadcoin_rs_network
+    environment:
+      - WALLET_PATH=./nico.wallet
+    ports:
+      - "8001:8000"
+
+  solaqua:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    networks:
+      - nomadcoin_rs_network
+    environment:
+      - WALLET_PATH=./solaqua.wallet
+    ports:
+      - "8002:8000"
+      
+networks:
+  nomadcoin_rs_network:
+    driver: bridge

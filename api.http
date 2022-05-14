@@ -1,52 +1,60 @@
+@address = {{wallet.response.body.*}}
+
+# Change port for the different wallets
+# 8000: sjquant, 8001: nico, 8002: solaqua
+@host = http://localhost:8000
+
+
 ### Get Documentation
-GET http://localhost:8000/
+GET {{host}}/
+
+### Get my wallet address
+# @name wallet
+GET {{host}}/my-wallet
 
 ### See all blocks
-GET http://localhost:8000/blocks
+GET {{host}}/blocks
 
 ### Mine a block
-POST http://localhost:8000/blocks
+POST {{host}}/blocks
 
 {
-    "address": "0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975"
+    "address": "{{address}}"
 }
 
 ### Get a block
-GET http://localhost:8000/blocks/08ebbac37e4f6a3afa9a7c609d6bc631710f990e3ed6c4766ba82344987f6469
+GET {{host}}/blocks/08ebbac37e4f6a3afa9a7c609d6bc631710f990e3ed6c4766ba82344987f6469
 
 ### Get a nonexistent block
-GET http://localhost:8000/blocks/nonexistent-block
+GET {{host}}/blocks/nonexistent-block
 
 ### Get transaction outputs for an address
-GET http://localhost:8000/addresses/0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975/txnouts
+GET {{host}}/addresses/{{address}}/txnouts
 
 ### Get balance for an address
-GET http://localhost:8000/addresses/0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975/balance
+GET {{host}}/addresses/{{address}}/balance
 
 ### Get transactions inside blockchain memory pool
-GET http://localhost:8000/mempool
+GET {{host}}/mempool
 
 ### Make transaction inside blockchain memory pool
-POST http://localhost:8000/transactions
+POST {{host}}/transactions
 
 {
-    "from": "0433E4341DAA285EC5E1D1CFCF80228C4BE299DB8C20740F10B2BB7B2CF5CF10D7A5B40E7544C3D94FFF533464072004C05C3C41B08ED618A64F78F76E703E2975",
+    "from": "{{address}}",
     "to": "my-address",
     "amount": 35
 }
 
-### Get my wallet address
-GET http://localhost:8000/my-wallet
-
 ### See peers
-GET http://localhost:8000/peers
-        
+GET {{host}}/peers
+
 ### Add a peer
-POST http://localhost:8000/peers
+POST {{host}}/peers
         
 {
-    "address": "127.0.0.1:8001"
+    "address": "nico:8000"
 }
 
 ### See app id
-GET http://localhost:8000/app-id
+GET {{host}}/app-id
