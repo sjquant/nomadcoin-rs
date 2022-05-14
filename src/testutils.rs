@@ -1,6 +1,5 @@
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use std::env;
 use std::{collections::HashMap, io::Error, iter, sync::Mutex};
 
 use crate::Wallet;
@@ -53,7 +52,7 @@ impl BaseRepository for TestRepository {
 }
 
 pub fn test_pickle_db() -> Mutex<PickleDb> {
-    let temp_path = env::temp_dir().join(format!("{}.db", random_string(32)));
+    let temp_path = std::env::temp_dir().join(format!("{}.db", random_string(32)));
     let db = Mutex::new(PickleDb::new(
         temp_path,
         PickleDbDumpPolicy::AutoDump,
@@ -63,7 +62,7 @@ pub fn test_pickle_db() -> Mutex<PickleDb> {
 }
 
 pub fn test_wallet() -> Wallet {
-    let temp_path = env::temp_dir().join(format!("{}.wallet", random_string(32)));
+    let temp_path = std::env::temp_dir().join(format!("{}.wallet", random_string(32)));
     let wallet = Wallet::get(temp_path.to_str().unwrap());
     wallet
 }
